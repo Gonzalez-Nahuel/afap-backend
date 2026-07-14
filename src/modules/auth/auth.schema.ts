@@ -1,0 +1,42 @@
+import { z } from "zod";
+
+export const registerUserSchema = z.object({
+  body: z.object({
+    username: z
+      .string()
+      .min(6, { error: "El usuario debe tener al menos 6 caracteres" })
+      .regex(/^[a-zA-Z0-9_]+$/, {
+        message: "El usuario solo permite letras, números y guiones bajos",
+      })
+      .max(50, "El usuario es demasiado largo"),
+
+    email: z
+      .email({ error: "Formato de correo electrónico inválido" })
+      .trim()
+      .toLowerCase()
+      .max(80, "El email es demasiado largo"),
+
+    password: z
+      .string()
+      .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
+      .regex(/[A-Z]/, { message: "Debe contener al menos una letra mayúscula" })
+      .regex(/[a-z]/, { message: "Debe contener al menos una letra minúscula" })
+      .regex(/[0-9]/, { message: "Debe contener al menos un número" })
+      .regex(/[^a-zA-Z0-9]/, {
+        message: "Debe contener al menos un carácter especial",
+      })
+      .max(100, "La contraseña es demasiado larga"),
+  }),
+});
+
+export const loginUserSchema = z.object({
+  headers: z.object({
+    "x-client-type": z.enum(["web", "mobile"], {
+      error: "X-Client-type debe ser 'web' o 'mobile'",
+    }),
+  }),
+  body: z.object({
+    email: z.email().max(80).trim().toLowerCase(),
+    password: z.string().min(1).max(100),
+  }),
+});

@@ -29,14 +29,25 @@ export const registerUserSchema = z.object({
   }),
 });
 
-export const loginUserSchema = z.object({
-  headers: z.object({
-    "x-client-type": z.enum(["web", "mobile"], {
-      error: "X-Client-type debe ser 'web' o 'mobile'",
-    }),
+const clientTypeHeaderSchema = z.object({
+  "x-client-type": z.enum(["web", "mobile"], {
+    error: "X-Client-type debe ser 'web' o 'mobile'",
   }),
+});
+
+export const loginUserSchema = z.object({
+  headers: clientTypeHeaderSchema,
   body: z.object({
-    email: z.email().max(80).trim().toLowerCase(),
+    email: z
+      .email({ error: "Formato de correo electrónico inválido" })
+      .max(80, "El email es demasiado largo")
+      .trim()
+      .toLowerCase(),
     password: z.string().min(1).max(100),
   }),
+});
+
+export const refreshTokenSchema = z.object({
+  headers: clientTypeHeaderSchema,
+  body: z.object({ refreshToken: z.string().optional() }).optional(),
 });

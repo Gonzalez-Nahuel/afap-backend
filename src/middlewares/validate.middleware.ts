@@ -18,5 +18,8 @@ export const validate =
     if (validated.params) req.params = validated.params;
     if (validated.query) req.query = validated.query;
 
+    if (validated.headers?.["x-client-type"])
+      req.clientType = validated.headers["x-client-type"];
+
     next();
   };

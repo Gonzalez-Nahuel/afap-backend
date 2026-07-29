@@ -2,7 +2,11 @@ import { asyncHandler } from "@/middlewares/async-handler";
 import { Router } from "express";
 import { authController } from "./auth.controller";
 import { validate } from "@/middlewares/validate.middleware";
-import { loginUserSchema, registerUserSchema } from "./auth.schema";
+import {
+  loginUserSchema,
+  refreshTokenSchema,
+  registerUserSchema,
+} from "./auth.schema";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 
 export const authRouter = Router();
@@ -204,6 +208,7 @@ authRouter.post(
  *             schema:
  *               $ref: '#/components/schemas/ApiError'
  */
+
 authRouter.post(
   "/login",
   validate(loginUserSchema),
@@ -259,3 +264,119 @@ authRouter.post(
  *               $ref: '#/components/schemas/ApiError'
  */
 authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
+
+/**
+ * @openapi
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Renovar tokens de autenticación
+ *     description: |
+ *       Renueva el accessToken cuando este haya expirado.
+ *       También renueva el refreshToken en cada solicitud.
+ *       Para clientes web, el refreshToken se lee desde una cookie HttpOnly.
+ *       Para clientes móviles, el refreshToken se envía en el body de la solicitud.
+ *     tags:
+ *       - Auth
+ *     parameters:
+ *       - in: header
+ *         name: x-client-type
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [web, mobile]
+ *         description: Tipo de cliente que solicita la renovación de tokens.
+ *         example: web
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                 description: Refresh token enviado por clientes móviles.
+ *     responses:
+ *       200:
+ *         description: Access token y refresh token renovados correctamente.
+ *         headers:
+ *           Set-Cookie:
+ *             schema:
+ *               type: string
+ *             description: Solo para clientes web. Nueva cookie HttpOnly con el refreshToken.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   description: Respuesta para clientes web.
+ *                   properties:
+ *                     accessToken:
+ *                       type: string
+ *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                       description: Nuevo token JWT de acceso válido por 15 minutos.
+ *                   required:
+ *                     - accessToken
+ *                 - type: object
+ *                   description: Respuesta para clientes móviles.
+ *                   properties:
+ *                     accessToken:
+ *                       type: string
+ *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                       description: Nuevo token JWT de acceso válido por 15 minutos.
+ *                     refreshToken:
+ *                       type: string
+ *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                       description: Nuevo refreshToken para el cliente móvil.
+ *                   required:
+ *                     - accessToken
+ *                     - refreshToken
+ *       400:
+ *         description: Error de validación en la cabecera o en el body de la solicitud.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/ValidationError'
+ *                 - $ref: '#/components/schemas/ApiError'
+ *             examples:
+ *               missingClientType:
+ *                 summary: Falta x-client-type en la cabecera
+ *                 value:
+ *                   ok: false
+ *                   message: "Error de validación"
+ *                   errors:
+ *                     - field: "headers.x-client-type"
+ *                       message: "X-Client-type debe ser 'web' o 'mobile'"
+ *       401:
+ *         description: Refresh token inválido, expirado, ausente o no autorizado.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TokenError'
+ *             examples:
+ *               missingRefreshTokenWeb:
+ *                 summary: Falta refreshToken en la cookie para cliente web
+ *                 value:
+ *                   ok: false
+ *                   message: "No se envio refreshToken"
+ *               invalidRefreshToken:
+ *                 summary: Refresh token inválido o expirado
+ *                 value:
+ *                   ok: false
+ *                   message: "Refresh token inválido"
+ *       500:
+ *         description: Error inesperado en el servidor.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
+authRouter.post(
+  "/refresh",
+  validate(refreshTokenSchema),
+  asyncHandler(authController.refresh),
+);
+
+authRouter.post("/logout", authMiddleware, asyncHandler(authController.logout));

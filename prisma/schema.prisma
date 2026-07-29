@@ -101,7 +101,7 @@ enum AchievementType {
 }
 
 model User {
-  id            Int     @id @default(autoincrement())
+  id            String     @id @default(uuid())
   username          String
   email         String  @unique
   password  String
@@ -113,8 +113,22 @@ model User {
   persons Person[]
 }
 
+model Session {
+  id String @id @default(uuid())
+  userId String
+  hashRefresh String @unique
+  userAgent String
+  ipAddress String
+  isRevoked Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime
+
+  @@index([userId, hashRefresh])
+}
+
 model Person {
-  id        Int    @id @default(autoincrement())
+  id        String    @id @default(uuid())
   firstName String
   lastName  String
 
@@ -122,7 +136,7 @@ model Person {
   phone     String?
   birthDate DateTime?
 
-  userId Int?
+  userId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -154,7 +168,7 @@ model Person {
 }
 
 model Sport {
-  id   Int    @id @default(autoincrement())
+  id   String    @id @default(uuid())
   name String
   slug String @unique
 
@@ -162,13 +176,13 @@ model Sport {
 }
 
 model Competition {
-  id          Int     @id @default(autoincrement())
+  id          String     @id @default(uuid())
   name        String
   slug        String  @unique
   description String?
   city        String?
 
-  sportId Int
+  sportId String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -182,10 +196,10 @@ model Competition {
 }
 
 model CompetitionMember {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  competitionId Int
-  personId      Int
+  competitionId String
+  personId      String
 
   role   CompetitionRole
   status MemberStatus    @default(ACTIVE)
@@ -200,14 +214,14 @@ model CompetitionMember {
 }
 
 model Invitation {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  personId Int
+  personId String
 
   token String @unique
 
-  competitionId Int?
-  editionId     Int?
+  competitionId String?
+  editionId     String?
 
   role String
 
@@ -225,9 +239,9 @@ model Invitation {
 }
 
 model Edition {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  competitionId Int
+  competitionId String
 
   name String
   slug String @unique
@@ -260,10 +274,10 @@ model Edition {
 }
 
 model EditionMember {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  editionId Int
-  personId  Int
+  editionId String
+  personId  String
 
   role EditionRole
 
@@ -279,7 +293,7 @@ model EditionMember {
 }
 
 model Team {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
   name String
 
@@ -287,7 +301,7 @@ model Team {
 
   enrollToken String @unique
 
-  enrollConvocationId Int?
+  enrollConvocationId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -299,10 +313,10 @@ model Team {
 }
 
 model TeamAchievement {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  teamId    Int
-  editionId Int
+  teamId    String
+  editionId String
 
   achievement AchievementType
 
@@ -316,10 +330,10 @@ model TeamAchievement {
 }
 
 model TeamMember {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  teamId   Int
-  personId Int
+  teamId   String
+  personId String
 
   role TeamRole
 
@@ -336,10 +350,10 @@ model TeamMember {
 }
 
 model TeamConvocation {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  teamId    Int
-  createdBy Int
+  teamId    String
+  createdBy String
 
   note String?
 
@@ -353,10 +367,10 @@ model TeamConvocation {
 }
 
 model TeamConvocationMember {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  convocationId Int
-  personId      Int
+  convocationId String
+  personId      String
 
   createdAt DateTime @default(now())
 
@@ -368,16 +382,16 @@ model TeamConvocationMember {
 }
 
 model EditionTeam {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  editionId Int
-  teamId    Int?
+  editionId String
+  teamId    String?
 
   name String
 
   groupName String?
 
-  enrolledBy Int?
+  enrolledBy String?
 
   createdAt DateTime @default(now())
 
@@ -399,10 +413,10 @@ model EditionTeam {
 }
 
 model EditionTeamPlayer {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  editionTeamId Int
-  personId      Int
+  editionTeamId String
+  personId      String
 
   shirtNumber Int?
   position    String?
@@ -417,10 +431,10 @@ model EditionTeamPlayer {
 }
 
 model EditionTeamStaff {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  editionTeamId Int
-  personId      Int
+  editionTeamId String
+  personId     String
 
   role StaffRole
 
@@ -434,9 +448,9 @@ model EditionTeamStaff {
 }
 
 model Round {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  editionId Int
+  editionId String
 
   name String
 
@@ -452,13 +466,13 @@ model Round {
 }
 
 model Match {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  editionId Int
-  roundId   Int
+  editionId String
+  roundId   String
 
-  homeEditionTeamId Int?
-  awayEditionTeamId Int?
+  homeEditionTeamId String?
+  awayEditionTeamId String?
 
   date DateTime?
 
@@ -469,8 +483,8 @@ model Match {
   homeScore Int @default(0)
   awayScore Int @default(0)
 
-  parentHomeMatchId Int?
-  parentAwayMatchId Int?
+  parentHomeMatchId String?
+  parentAwayMatchId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -501,10 +515,10 @@ model Match {
 }
 
 model MatchReferee {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  matchId  Int
-  personId Int
+  matchId  String
+  personId String
 
   role RefereeRole
 
@@ -519,13 +533,13 @@ model MatchReferee {
 }
 
 model MatchEvent {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  matchId Int
+  matchId String
 
-  personId Int?
+  personId String?
 
-  editionTeamId Int
+  editionTeamId String
 
   type EventType
 
@@ -533,7 +547,7 @@ model MatchEvent {
 
   extraMinute Int @default(0)
 
-  createdBy Int?
+  createdBy String?
 
   createdAt DateTime @default(now())
 
@@ -549,10 +563,10 @@ model MatchEvent {
 }
 
 model OfficialCertification {
-  id Int @id @default(autoincrement())
+  id String @id @default(uuid())
 
-  editionId Int
-  personId  Int
+  editionId String
+  personId  String
 
   pricePaid Decimal
 

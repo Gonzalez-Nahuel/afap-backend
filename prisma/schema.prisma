@@ -106,11 +106,26 @@ model User {
   email         String  @unique
   password  String
   emailVerified Boolean @default(false)
+  isVerified Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   persons Person[]
+  session Session[]
+  verificationToken VerificationToken[]
+}
+
+model VerificationToken {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  userId String
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tokenHash, id])
 }
 
 model Session {
@@ -123,6 +138,8 @@ model Session {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   expiresAt DateTime
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, hashRefresh])
 }

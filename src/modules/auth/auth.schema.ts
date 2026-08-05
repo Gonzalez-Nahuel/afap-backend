@@ -51,3 +51,8 @@ export const refreshTokenSchema = z.object({
   headers: clientTypeHeaderSchema,
   body: z.object({ refreshToken: z.string().optional() }).optional(),
 });
+
+export const logoutSchema = z.object({
+  headers: clientTypeHeaderSchema,
+  body: z.object({ refreshToken: z.string().optional() }).optional(),
+});

@@ -4,6 +4,7 @@ import { authController } from "./auth.controller";
 import { validate } from "@/middlewares/validate.middleware";
 import {
   loginUserSchema,
+  logoutSchema,
   refreshTokenSchema,
   registerUserSchema,
 } from "./auth.schema";
@@ -93,10 +94,12 @@ authRouter.post(
  *   post:
  *     summary: Iniciar sesión
  *     description: |
- *       Autentica un usuario con sus credenciales y devuelve un token de acceso.
- *       La respuesta varía según el tipo de cliente especificado en el header 'x-client-type':
- *       - Para clientes web: devuelve accessToken en la respuesta y refreshToken en una cookie HttpOnly.
- *       - Para clientes móviles: devuelve accessToken y refreshToken en la respuesta JSON.
+ *       Autentica un usuario con sus credenciales y devuelve el par de tokens necesario para mantener la sesión.
+ *       El comportamiento depende del header `x-client-type`:
+ *       - `web`: devuelve el `accessToken` en el body y guarda el `refreshToken` en una cookie `HttpOnly` llamada `refreshToken`.
+ *       - `mobile`: devuelve `accessToken` y `refreshToken` en el body de la respuesta JSON.
+ *
+ *       La sesión se registra en la base de datos con el `hashRefresh`, el `ipAddress` y el `userAgent` capturados por el backend.
  *     tags:
  *       - Auth
  *     parameters:
@@ -106,7 +109,7 @@ authRouter.post(
  *         schema:
  *           type: string
  *           enum: [web, mobile]
- *         description: Tipo de cliente realizando la solicitud (web o mobile).
+ *         description: Tipo de cliente realizando la solicitud. El flujo difiere entre navegador y aplicación móvil.
  *         example: web
  *     requestBody:
  *       required: true
@@ -137,13 +140,13 @@ authRouter.post(
  *           Set-Cookie:
  *             schema:
  *               type: string
- *             description: Solo para clientes web. Contiene el refreshToken en una cookie HttpOnly, segura y con sameSite=strict.
+ *             description: Solo para clientes web. Guarda el refreshToken en una cookie `HttpOnly` con `sameSite=strict` y duración de 7 días.
  *         content:
  *           application/json:
  *             schema:
  *               oneOf:
  *                 - type: object
- *                   description: Respuesta para clientes web (sin refreshToken en el body).
+ *                   description: Respuesta para clientes web.
  *                   properties:
  *                     user:
  *                       $ref: '#/components/schemas/UserResponse'
@@ -155,7 +158,7 @@ authRouter.post(
  *                     - user
  *                     - accessToken
  *                 - type: object
- *                   description: Respuesta para clientes móviles (con refreshToken en el body).
+ *                   description: Respuesta para clientes móviles.
  *                   properties:
  *                     user:
  *                       $ref: '#/components/schemas/UserResponse'
@@ -271,10 +274,12 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *   post:
  *     summary: Renovar tokens de autenticación
  *     description: |
- *       Renueva el accessToken cuando este haya expirado.
- *       También renueva el refreshToken en cada solicitud.
- *       Para clientes web, el refreshToken se lee desde una cookie HttpOnly.
- *       Para clientes móviles, el refreshToken se envía en el body de la solicitud.
+ *       Renueva el `accessToken` y, en cada solicitud, rota también el `refreshToken`.
+ *       La forma de leer el token depende del cliente:
+ *       - `web`: el refresh se toma desde la cookie `refreshToken` y la nueva cookie se reemplaza por la nueva sesión.
+ *       - `mobile`: el refresh se envía en el body del request y el nuevo refresh se devuelve en el JSON.
+ *
+ *       La sesión anterior se revoca y se crea una nueva sesión con el `hashRefresh` actualizado, el `ipAddress` y el `userAgent` actuales.
  *     tags:
  *       - Auth
  *     parameters:
@@ -296,7 +301,7 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *               refreshToken:
  *                 type: string
  *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                 description: Refresh token enviado por clientes móviles.
+ *                 description: Refresh token enviado por clientes móviles. Este campo es opcional para web, porque el valor se toma desde la cookie.
  *     responses:
  *       200:
  *         description: Access token y refresh token renovados correctamente.
@@ -304,7 +309,7 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *           Set-Cookie:
  *             schema:
  *               type: string
- *             description: Solo para clientes web. Nueva cookie HttpOnly con el refreshToken.
+ *             description: Solo para clientes web. Reemplaza la cookie `refreshToken` por el nuevo refresh rotado.
  *         content:
  *           application/json:
  *             schema:
@@ -379,4 +384,76 @@ authRouter.post(
   asyncHandler(authController.refresh),
 );
 
-authRouter.post("/logout", authMiddleware, asyncHandler(authController.logout));
+/**
+ * @openapi
+ * /api/auth/logout:
+ *   post:
+ *     summary: Cerrar sesión
+ *     description: |
+ *       Finaliza la sesión actual invalidando la sesión asociada al `refreshToken`.
+ *       El endpoint no necesita el `accessToken` en el header para cerrar sesión.
+ *       El flujo depende del cliente:
+ *       - `web`: el `refreshToken` se toma desde la cookie `refreshToken` y el backend limpia esa cookie al responder.
+ *       - `mobile`: el `refreshToken` puede enviarse en el body para revocar la sesión activa.
+ *
+ *       En ambos casos, el backend revoca la sesión asociada al `refreshToken` hashado y responde con `ok: true`.
+ *     tags:
+ *       - Auth
+ *     parameters:
+ *       - in: header
+ *         name: x-client-type
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [web, mobile]
+ *         description: Tipo de cliente que solicita el cierre de sesión.
+ *         example: web
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                 description: Refresh token opcional para clientes móviles. Para web, se toma desde la cookie.
+ *     responses:
+ *       200:
+ *         description: Sesión cerrada correctamente.
+ *         headers:
+ *           Set-Cookie:
+ *             schema:
+ *               type: string
+ *             description: Solo para clientes web. Elimina la cookie `refreshToken` del navegador.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: true
+ *               required:
+ *                 - ok
+ *       400:
+ *         description: Error de validación del header o del body.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/ValidationError'
+ *                 - $ref: '#/components/schemas/ApiError'
+ *       500:
+ *         description: Error inesperado en el servidor.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
+authRouter.post(
+  "/logout",
+  validate(logoutSchema),
+  asyncHandler(authController.logout),
+);

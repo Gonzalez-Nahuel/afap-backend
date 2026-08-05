@@ -21,5 +21,10 @@ export const validate =
     if (validated.headers?.["x-client-type"])
       req.clientType = validated.headers["x-client-type"];
 
+    req.clientInfo = {
+      ip: req.ip || "unknown",
+      userAgent: req.headers["user-agent"] || "unknown-client",
+    };
+
     next();
   };

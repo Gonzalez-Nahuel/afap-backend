@@ -5,15 +5,14 @@ export const authController = {
   register: async (req, res) => {
     const user = await authService.registerUser(req.body);
 
-    res.status(200).json(user);
+    return res.status(200).json(user);
   },
   login: async (req, res) => {
     const clientType = req.clientType;
 
     const { user, accessToken, refreshToken } = await authService.loginUser({
       body: req.body,
-      ip: req.ip || "unknown",
-      userAgent: req.headers["user-agent"] || "unknown-client",
+      ...req.clientInfo!,
     });
 
     if (clientType === "web") {
@@ -39,15 +38,16 @@ export const authController = {
   me: async (req, res) => {
     const user = req.user;
 
-    res.status(200).json(user);
+    return res.status(200).json(user);
   },
-  refresh: (req, res) => {
+  refresh: async (req, res) => {
     const clientType = req.clientType;
 
     if (clientType === "web") {
-      const { accessToken, newRefreshToken } = authService.refresh(
-        req.cookies.refreshToken,
-      );
+      const { accessToken, newRefreshToken } = await authService.refresh({
+        token: req.cookies.refreshToken,
+        ...req.clientInfo!,
+      });
 
       res.cookie("refreshToken", newRefreshToken, {
         httpOnly: true,
@@ -55,19 +55,33 @@ export const authController = {
         maxAge: 1000 * 60 * 60 * 24 * 7,
       });
 
-      res.status(200).json({ accessToken });
+      return res.status(200).json({ accessToken });
     }
 
     if (clientType === "mobile") {
-      const { accessToken, newRefreshToken } = authService.refresh(
-        req.body.refreshToken,
-      );
+      const { accessToken, newRefreshToken } = await authService.refresh({
+        token: req.body.refreshToken,
+        ...req.clientInfo!,
+      });
 
-      res.status(200).json({
+      return res.status(200).json({
         accessToken,
         refreshToken: newRefreshToken,
       });
     }
   },
-  logout: (req, res) => {},
+  logout: async (req, res) => {
+    const clientType = req.clientType;
+    const refreshToken =
+      clientType === "web" ? req.cookies.refreshToken : req.body.refreshToken;
+
+    if (refreshToken) await authService.logout(refreshToken);
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      sameSite: "strict",
+    });
+
+    return res.status(200).json({ ok: true });
+  },
 } satisfies Record<string, RequestHandler>;

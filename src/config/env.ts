@@ -16,6 +16,7 @@ const envSchema = z.object({
     .min(10, "El secreto de Refresh Token es muy corto"),
   ACCESS_TOKEN_EXPIRES: z.enum(["15m"]),
   REFRESH_TOKEN_EXPIRES: z.enum(["7d"]),
+  RESEND_API_KEY: z.string(),
   PORT: z.coerce.number().default(3000),
 });
 

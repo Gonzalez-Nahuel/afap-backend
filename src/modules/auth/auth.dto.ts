@@ -25,7 +25,7 @@ export interface RefreshDTO extends ClientInfoDTO {
 
 export interface CreateSessionDTO {
   userId: string;
-  hashRefresh: string;
+  refreshTokenHash: string;
   userAgent: string;
   ipAddress: string;
   expiresAt: Date;

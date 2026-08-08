@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import { authService } from "./auth.service";
+import { verifyEmailSchema } from "./auth.schema";
 
 export const authController = {
   register: async (req, res) => {
@@ -7,6 +8,13 @@ export const authController = {
 
     return res.status(200).json(user);
   },
+
+  verifyEmail: async (req, res) => {
+    const token = req.body.token;
+
+    const isVerified = authService.verifyEmail(token);
+  },
+
   login: async (req, res) => {
     const clientType = req.clientType;
 

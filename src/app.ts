@@ -24,8 +24,6 @@ app.use(
 
 app.use(express.json());
 
-app.set;
-
 app.use(cookieParser());
 
 app.use(pinoHttp({ logger }));

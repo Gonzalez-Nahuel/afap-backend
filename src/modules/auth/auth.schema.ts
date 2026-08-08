@@ -56,3 +56,12 @@ export const logoutSchema = z.object({
   headers: clientTypeHeaderSchema,
   body: z.object({ refreshToken: z.string().optional() }).optional(),
 });
+
+export const verifyEmailSchema = z.object({
+  body: z.object({
+    token: z
+      .string()
+      .min(6, "El código debe tener 6 dígitos")
+      .max(6, "El código debe tener 6 dígitos"),
+  }),
+});

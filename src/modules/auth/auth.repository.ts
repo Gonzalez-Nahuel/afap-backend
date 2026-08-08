@@ -34,11 +34,19 @@ export const authRepository = {
     return await prisma.user.findUnique({ where: { email } });
   },
 
+  getVerificationToken: async (token: string) => {
+    return await prisma.verificationToken.findUnique({
+      where: { tokenHash: token },
+    });
+  },
+
+  verifyUserAccount: async (id: string) => {},
+
   createSession: async (data: CreateSessionDTO) => {
     return await prisma.session.create({
       data: {
         userId: data.userId,
-        hashRefresh: data.hashRefresh,
+        refreshTokenHash: data.refreshTokenHash,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
         expiresAt: data.expiresAt,
@@ -46,13 +54,13 @@ export const authRepository = {
     });
   },
 
-  getSession: async (hashRefresh: string) => {
-    return await prisma.session.findUnique({ where: { hashRefresh } });
+  getSession: async (refreshTokenHash: string) => {
+    return await prisma.session.findUnique({ where: { refreshTokenHash } });
   },
 
-  revokeSession: async (hashRefresh: string) => {
+  revokeSession: async (refreshTokenHash: string) => {
     return await prisma.session.updateMany({
-      where: { hashRefresh, isRevoked: false },
+      where: { refreshTokenHash, isRevoked: false },
       data: { isRevoked: true },
     });
   },

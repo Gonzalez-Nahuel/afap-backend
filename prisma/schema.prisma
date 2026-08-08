@@ -131,7 +131,7 @@ model VerificationToken {
 model Session {
   id String @id @default(uuid())
   userId String
-  hashRefresh String @unique
+  refreshTokenHash String @unique
   userAgent String
   ipAddress String
   isRevoked Boolean @default(false)
@@ -141,7 +141,7 @@ model Session {
 
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, hashRefresh])
+  @@index([userId, refreshTokenHash])
 }
 
 model Person {

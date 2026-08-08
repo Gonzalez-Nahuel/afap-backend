@@ -18,8 +18,12 @@ export const authRouter = Router();
  *   post:
  *     summary: Registrar un nuevo usuario
  *     description: |
- *       Crea una cuenta en la plataforma de forma segura.
- *       La contraseña se encripta de forma asíncrona antes de almacenarse en la base de datos.
+ *       Endpoint de registro clásico para crear una cuenta con `username`, `email` y `password`.
+ *       El middleware `validate` aplica el schema Zod de registro al `body` con los campos requeridos antes de llegar al handler.
+ *       En el servicio se verifica si el correo ya existe en Prisma; si existe, se lanza `AppError(400)` con el mensaje `El email ya está registrado`.
+ *       Si no existe, se aplica `bcrypt.hash` sobre la contraseña, se genera un OTP y un `verificationToken` con expiración de 5 minutos,
+ *       se persiste el usuario y la relación de verificación en la base de datos y se reenvía el código al correo del usuario mediante `Resend`.
+ *       El registro no devuelve tokens ni crea sesión: solo devuelte el perfil público del usuario recién creado.
  *     tags:
  *       - Auth
  *     requestBody:
@@ -39,13 +43,13 @@ export const authRouter = Router();
  *                 maxLength: 50
  *                 pattern: "^[a-zA-Z0-9_]+$"
  *                 example: "pepe_g"
- *                 description: Debe tener entre 6 y 50 caracteres. Solo se admiten letras, números y guiones bajos.
+ *                 description: Nombre visible del usuario. Debe tener entre 6 y 50 caracteres y aceptar solo letras, números y guiones bajos.
  *               email:
  *                 type: string
  *                 format: email
  *                 maxLength: 80
  *                 example: "pepe.dev@example.com"
- *                 description: Dirección de correo electrónico única y válida.
+ *                 description: Dirección de correo electrónico única y válida. El valor se normaliza a minúsculas antes de consultarse.
  *               password:
  *                 type: string
  *                 format: password
@@ -53,29 +57,54 @@ export const authRouter = Router();
  *                 maxLength: 100
  *                 example: "SecureP@ss123"
  *                 description: |
- *                   Debe cumplir con los siguientes requisitos de complejidad:
- *                   - Mínimo 8 y máximo 100 caracteres.
+ *                   Contraseña con complejidad requerida:
+ *                   - Al menos 8 caracteres.
  *                   - Al menos una letra mayúscula.
  *                   - Al menos una letra minúscula.
  *                   - Al menos un número.
  *                   - Al menos un carácter especial.
  *     responses:
  *       200:
- *         description: Usuario registrado y guardado exitosamente en la base de datos.
+ *         description: Registro exitoso. La respuesta pública incluye id, username, email y createdAt.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/UserResponse'
  *       400:
- *         description: Error en la validación de los datos (ZodError) o conflicto lógico (email duplicado).
+ *         description: |
+ *           Error de entrada o conflicto lógico.
+ *           Puede venir de Zod (`Error de validación`) o del servicio cuando el email ya existe (`El email ya está registrado`).
  *         content:
  *           application/json:
  *             schema:
  *               oneOf:
  *                 - $ref: '#/components/schemas/ValidationError'
  *                 - $ref: '#/components/schemas/ApiError'
+ *             examples:
+ *               validation:
+ *                 summary: Validación del cuerpo
+ *                 value:
+ *                   ok: false
+ *                   message: "Error de validación"
+ *                   errors:
+ *                     - field: "body.email"
+ *                       message: "Formato de correo electrónico inválido"
+ *               duplicateEmail:
+ *                 summary: Email duplicado
+ *                 value:
+ *                   ok: false
+ *                   message: "El email ya está registrado"
+ *       502:
+ *         description: El email de verificación no pudo enviarse a través de Resend. La capa de servicio lo reporta como error de gateway de correo.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ *             example:
+ *               ok: false
+ *               message: "No se pudo enviar el email, reenviar el código"
  *       500:
- *         description: Error inesperado en el servidor.
+ *         description: Error inesperado del servidor o falla persistente de Prisma al crear el usuario.
  *         content:
  *           application/json:
  *             schema:

@@ -126,6 +126,7 @@ export const authService = {
 
     if (!session || session?.isRevoked) {
       if (session?.isRevoked) {
+        await authRepository.revokeAllUserSessions(session.userId);
       }
       throw new AppError(401, "INVALID_SESSION", "sesión inválida o cerrada");
     }

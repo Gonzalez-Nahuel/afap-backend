@@ -82,4 +82,11 @@ export const authRepository = {
       data: { isRevoked: true },
     });
   },
+
+  revokeAllUserSessions: async (userId: string) => {
+    return await prisma.session.updateMany({
+      where: { userId },
+      data: { isRevoked: true },
+    });
+  },
 };

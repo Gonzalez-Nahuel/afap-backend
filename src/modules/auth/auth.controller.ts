@@ -6,13 +6,21 @@ export const authController = {
   register: async (req, res) => {
     const user = await authService.registerUser(req.body);
 
-    return res.status(200).json(user);
+    return res.status(200).json({
+      ok: true,
+      user,
+    });
   },
 
   verifyEmail: async (req, res) => {
     const token = req.body.token;
 
-    const isVerified = authService.verifyEmail(token);
+    const verifiedUserId = await authService.verifyEmail(token);
+
+    return res.status(200).json({
+      ok: true,
+      userId: verifiedUserId,
+    });
   },
 
   login: async (req, res) => {
@@ -31,6 +39,7 @@ export const authController = {
       });
 
       return res.status(200).json({
+        ok: true,
         user,
         accessToken,
       });
@@ -38,6 +47,7 @@ export const authController = {
 
     if (clientType === "mobile")
       return res.status(200).json({
+        ok: true,
         user,
         accessToken,
         refreshToken,
@@ -46,7 +56,7 @@ export const authController = {
   me: async (req, res) => {
     const user = req.user;
 
-    return res.status(200).json(user);
+    return res.status(200).json({ ok: true, user });
   },
   refresh: async (req, res) => {
     const clientType = req.clientType;
@@ -63,7 +73,7 @@ export const authController = {
         maxAge: 1000 * 60 * 60 * 24 * 7,
       });
 
-      return res.status(200).json({ accessToken });
+      return res.status(200).json({ ok: true, accessToken });
     }
 
     if (clientType === "mobile") {
@@ -73,6 +83,7 @@ export const authController = {
       });
 
       return res.status(200).json({
+        ok: true,
         accessToken,
         refreshToken: newRefreshToken,
       });

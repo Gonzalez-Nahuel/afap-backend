@@ -7,6 +7,7 @@ import {
   logoutSchema,
   refreshTokenSchema,
   registerUserSchema,
+  verifyEmailSchema,
 } from "./auth.schema";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 
@@ -115,6 +116,12 @@ authRouter.post(
   "/register",
   validate(registerUserSchema),
   asyncHandler(authController.register),
+);
+
+authRouter.post(
+  "verify-email",
+  validate(verifyEmailSchema),
+  authController.verifyEmail,
 );
 
 /**

@@ -2,6 +2,9 @@ import type { NextFunction, Request, Response } from "express";
 import { AppError } from "@/lib/app-error";
 import { ZodError } from "zod";
 import jwt from "jsonwebtoken";
+import { Prisma } from "../../generated/prisma/client";
+import { env } from "@/config/env";
+import { logger } from "@/lib/logger";
 const { JsonWebTokenError, TokenExpiredError } = jwt;
 
 export const errorMiddleware = (
@@ -13,6 +16,7 @@ export const errorMiddleware = (
   if (err instanceof AppError)
     return res.status(err.statusCode).json({
       ok: false,
+      code: err.code,
       message: err.message,
     });
 
@@ -23,6 +27,7 @@ export const errorMiddleware = (
     }));
     return res.status(400).json({
       ok: false,
+      code: "VALIDATION_ERROR",
       message: "Error de validación",
       errors,
     });
@@ -31,6 +36,7 @@ export const errorMiddleware = (
   if (err instanceof TokenExpiredError) {
     return res.status(401).json({
       ok: false,
+      code: "TOKEN_EXPIRED_ERROR",
       message: "El token ha expirado",
     });
   }
@@ -38,13 +44,57 @@ export const errorMiddleware = (
   if (err instanceof JsonWebTokenError) {
     return res.status(401).json({
       ok: false,
+      code: "TOKEN_ERROR",
       message: "Token inválido o mal formado",
     });
   }
 
-  console.error("error", err);
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    console.error(`[PRISMA KNOWN ERROR] Código: ${err.code}`, err.message);
+
+    if (err.code === "P2002") {
+      return res.status(409).json({
+        ok: false,
+        code: "CONFLICT_ERROR",
+        message: "El recurso que intentas crear ya existe (llave duplicada)",
+      });
+    }
+
+    if (err.code === "P2025") {
+      return res.status(404).json({
+        ok: false,
+        code: "NOT_FOUND_ERROR",
+        message: "El registro solicitado no existe o no fue encontrado",
+      });
+    }
+
+    return res.status(500).json({
+      ok: false,
+      code: "DATABASE_ERROR",
+      message: "Hubo un error al procesar los datos en el servidor",
+    });
+  }
+
+  if (err instanceof Prisma.PrismaClientInitializationError) {
+    console.error(
+      "[PRISMA CONNECTION ERROR] No se pudo conectar a la BD",
+      err.message,
+    );
+    return res.status(503).json({
+      ok: false,
+      code: "DATABASE_CONNECTION_ERROR",
+      message: "Servicio de base de datos temporalmente no disponible",
+    });
+  }
+
+  logger.error(err, "error");
+
+  const isDev = env.NODE_ENV === "development";
+
   return res.status(500).json({
     ok: false,
+    code: "UNKNOWN_ERROR",
     message: "Internal server error",
+    ...(isDev && err instanceof Error ? { stack: err.stack } : {}),
   });
 };

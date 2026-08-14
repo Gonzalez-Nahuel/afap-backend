@@ -5,21 +5,19 @@ import type {
   RegisterUserDTO,
 } from "./auth.dto";
 import { string } from "zod";
+import { redis } from "@/lib/redis";
 
 export const authRepository = {
   createUser: async (
     data: RegisterUserDTO & {
       passwordHash: string;
-    } & CreateVerificationTokenDto,
+    },
   ) => {
     return await prisma.user.create({
       data: {
         username: data.username,
         email: data.email,
         password: data.passwordHash,
-        verificationToken: {
-          create: { tokenHash: data.tokenHash, expiresAt: data.expiresAt },
-        },
       },
       select: {
         id: true,
@@ -34,13 +32,33 @@ export const authRepository = {
     return await prisma.user.findUnique({ where: { email } });
   },
 
-  getVerificationToken: async (token: string) => {
-    return await prisma.verificationToken.findUnique({
-      where: { tokenHash: token },
-    });
+  createVerificationToken: async (
+    token: string,
+    userId: string,
+    ttl: number,
+  ) => {
+    await redis.set(`token:verification:${token}`, userId, "EX", ttl);
   },
 
-  verifyUserAccount: async (id: string) => {},
+  getUserIdByToken: async (token: string) => {
+    return await redis.get(`token:verification:${token}`);
+  },
+
+  verifyUserAccount: async (id: string) => {
+    return await prisma.$transaction(async (tx) => {
+      const userUpdated = await tx.user.update({
+        where: { id },
+        data: { isVerified: true },
+        select: {
+          id: true,
+        },
+      });
+
+      await tx.verificationToken.deleteMany({ where: { userId: id } });
+
+      return userUpdated;
+    });
+  },
 
   createSession: async (data: CreateSessionDTO) => {
     return await prisma.session.create({

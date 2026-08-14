@@ -23,25 +23,29 @@ const DUMMY_HASH =
 
 export const authService = {
   registerUser: async (data: RegisterUserDTO) => {
-    const userExist = await authRepository.findByEmail(data.email);
-    if (userExist) {
-      throw new AppError(400, "El email ya está registrado");
+    const userExists = await authRepository.findByEmail(data.email);
+    if (userExists) {
+      throw new AppError(409, "USER_EXISTS", "El email ya está registrado");
     }
 
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     const otp = generateOTP();
     const tokenHash = hashToken(otp);
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const EXPIRATION_SECONDS = 5 * 60;
 
     const userPayload = {
       ...data,
       passwordHash,
-      tokenHash,
-      expiresAt,
     };
 
     const user = await authRepository.createUser(userPayload);
+
+    await authRepository.createVerificationToken(
+      tokenHash,
+      user.id,
+      EXPIRATION_SECONDS,
+    );
 
     await sendEmail(data.email, otp);
 
@@ -51,15 +55,18 @@ export const authService = {
   verifyEmail: async (token: string) => {
     const tokenHash = hashToken(token);
 
-    const isTokenValid = await authRepository.getVerificationToken(tokenHash);
+    const userId = await authRepository.getUserIdByToken(tokenHash);
 
-    const now = Date.now();
-
-    if (!isTokenValid || now > isTokenValid.expiresAt.getTime())
+    if (!userId)
       throw new AppError(
         401,
+        "VERIFICATION_TOKEN_INVALID_OR_EXPIRED",
         "EL token de verificación no existe o ha expirado",
       );
+
+    await authRepository.verifyUserAccount(userId);
+
+    return userId;
   },
 
   loginUser: async ({ body, ip, userAgent }: LoginUserDTO) => {
@@ -73,7 +80,14 @@ export const authService = {
     );
 
     if (!userExist || !isPasswordValid)
-      throw new AppError(401, "Credenciales inválidas");
+      throw new AppError(401, "INVALID_CREDENTIALS", "Credenciales inválidas");
+
+    if (!userExist.isVerified)
+      throw new AppError(
+        403,
+        "USER_NOT_VERIFIED",
+        "La cuenta aún no ha sido verificada",
+      );
 
     const user = {
       id: userExist.id,
@@ -101,7 +115,8 @@ export const authService = {
     return { user, accessToken, refreshToken };
   },
   refresh: async ({ token, ip, userAgent }: RefreshDTO) => {
-    if (!token) throw new AppError(401, "No se envio refreshToken");
+    if (!token)
+      throw new AppError(401, "MISSING_TOKEN", "No se envio refreshToken");
 
     const verifiedToken = verifyRefreshToken(token) as UserPayload;
 
@@ -109,13 +124,17 @@ export const authService = {
 
     const session = await authRepository.getSession(refreshTokenHash);
 
-    if (!session || session?.isRevoked)
-      throw new AppError(401, "sesión inválida o cerrada");
+    if (!session || session?.isRevoked) {
+      if (session?.isRevoked) {
+      }
+      throw new AppError(401, "INVALID_SESSION", "sesión inválida o cerrada");
+    }
 
     const now = Date.now();
-    const exipresAt = session.expiresAt.getTime();
+    const expiresAtTime = session.expiresAt.getTime();
 
-    if (now >= exipresAt) throw new AppError(401, "La sesión ha expirado");
+    if (now >= expiresAtTime)
+      throw new AppError(401, "EXPIRED_SESSION", "La sesión ha expirado");
 
     await authRepository.revokeSession(refreshTokenHash);
 

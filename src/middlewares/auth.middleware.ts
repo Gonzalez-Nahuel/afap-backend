@@ -4,9 +4,14 @@ import type { RequestHandler } from "express";
 
 export const authMiddleware: RequestHandler = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-  if (!token) throw new AppError(401, "No autorizado");
+  if (!authHeader) throw new AppError(401, "MISSING_TOKEN", "Token requerido");
+
+  const token = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
+
+  if (!token) throw new AppError(401, "INVALID_TOKEN", "Token inválido");
 
   const user = verifyAccessToken(token) as UserPayload;
 

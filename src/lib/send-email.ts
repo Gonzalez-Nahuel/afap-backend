@@ -28,7 +28,11 @@ export const sendEmail = async (email: string, otpCode: string) => {
   if (error) {
     logger.error({ err: error, email }, "Fallo en la API resend");
 
-    throw new AppError(502, "No se pudo enviar el email, reenviar el código");
+    throw new AppError(
+      502,
+      "EMAIL_SEND_ERROR",
+      "No se pudo enviar el email, reenviar el código",
+    );
   }
 
   return data;

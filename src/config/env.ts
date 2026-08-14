@@ -8,6 +8,7 @@ const envSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
   DATABASE_URL: z.url("DATABASE_URL debe ser una URL válida"),
+  REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
   JWT_ACCESS_TOKEN_SECRET: z
     .string()
     .min(10, "El secreto de Access Token es muy corto"),

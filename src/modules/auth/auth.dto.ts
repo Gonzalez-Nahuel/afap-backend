@@ -1,9 +1,10 @@
 import z from "zod";
 import type { loginUserSchema, registerUserSchema } from "./auth.schema";
 
-export interface CreateVerificationTokenDto {
-  tokenHash: string;
-  expiresAt: Date;
+export interface VerificationDataDto {
+  token: string;
+  userId: string;
+  attemps: number;
 }
 
 export type RegisterUserDTO = z.infer<typeof registerUserSchema>["body"];

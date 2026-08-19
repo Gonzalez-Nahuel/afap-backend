@@ -1,10 +1,10 @@
 import { AppError } from "@/lib/app-error";
 import type {
   CreateSessionDTO,
-  CreateVerificationTokenDto,
   LoginUserDTO,
   RefreshDTO,
   RegisterUserDTO,
+  VerificationDataDto,
 } from "./auth.dto";
 import { authRepository } from "./auth.repository";
 import bcrypt from "bcrypt";
@@ -17,13 +17,15 @@ import {
 import { hashToken } from "@/lib/hash-token";
 import { generateOTP } from "@/lib/generate-otp-code";
 import { sendEmail } from "@/lib/send-email";
+import { resendVerifyTokenSchema } from "./auth.schema";
+import { email } from "zod";
 
 const DUMMY_HASH =
   "$2b$10$CwTycUXWue0Thq9StjUM0uJ8s6VjWaVn2yXhH3pk.XUL8/l6nR1Aq";
 
 export const authService = {
   registerUser: async (data: RegisterUserDTO) => {
-    const userExists = await authRepository.findByEmail(data.email);
+    const userExists = await authRepository.findUserByEmail(data.email);
     if (userExists) {
       throw new AppError(409, "USER_EXISTS", "El email ya está registrado");
     }
@@ -32,7 +34,7 @@ export const authService = {
 
     const otp = generateOTP();
     const tokenHash = hashToken(otp);
-    const EXPIRATION_SECONDS = 5 * 60;
+    const EXPIRATION_SECONDS = 15 * 60;
 
     const userPayload = {
       ...data,
@@ -42,37 +44,132 @@ export const authService = {
     const user = await authRepository.createUser(userPayload);
 
     await authRepository.createVerificationToken(
+      data.email,
       tokenHash,
       user.id,
       EXPIRATION_SECONDS,
     );
+
+    await authRepository.lockResendOtp(data.email);
 
     await sendEmail(data.email, otp);
 
     return user;
   },
 
-  verifyEmail: async (token: string) => {
+  verifyEmail: async (token: string, email: string) => {
     const tokenHash = hashToken(token);
 
-    const userId = await authRepository.getUserIdByToken(tokenHash);
+    const verificationData =
+      await authRepository.getVerificationUserData(email);
 
-    if (!userId)
+    if (!verificationData)
       throw new AppError(
-        401,
-        "VERIFICATION_TOKEN_INVALID_OR_EXPIRED",
-        "EL token de verificación no existe o ha expirado",
+        404,
+        "VERIFICATION_TOKEN_NOT_FOUND_OR_EXPIRED",
+        "EL token de verificación no existe o ha expirado. Solicita uno nuevo",
       );
 
-    await authRepository.verifyUserAccount(userId);
+    const parsedVerificationData: VerificationDataDto =
+      JSON.parse(verificationData);
 
-    return userId;
+    if (parsedVerificationData.attemps >= 5)
+      throw new AppError(
+        429,
+        "TOO_MANY_ATTEMPS",
+        "Has superado el límite de intentos permitidos. Solicita un nuevo código",
+      );
+
+    if (parsedVerificationData.token !== tokenHash) {
+      await authRepository.incrementVerificationAttemps(
+        email,
+        parsedVerificationData,
+      );
+
+      throw new AppError(
+        401,
+        "VERIFICATION_TOKEN_INVALID",
+        "EL token de verificación es inválido",
+      );
+    }
+
+    await authRepository.verifyUserAccount(
+      parsedVerificationData.userId,
+      email,
+    );
+
+    return parsedVerificationData.userId;
+  },
+
+  resendOtp: async (email: string) => {
+    const canResendOtp = await authRepository.canResendOtp(email);
+
+    if (!canResendOtp)
+      throw new AppError(
+        429,
+        "TOO_MANY_REQUEST",
+        "Por favor, espera 60 segundos antes de solicitar un nuevo código.",
+      );
+
+    const isAlreadyVerifiedInCache =
+      await authRepository.isAlreadyVerifiedInCache(email);
+
+    if (isAlreadyVerifiedInCache) return;
+
+    const otp = generateOTP();
+    const tokenHash = hashToken(otp);
+    const EXPIRATION_SECONDS = 15 * 60;
+
+    const hasVerificationDataInCache =
+      await authRepository.getVerificationUserData(email);
+
+    if (hasVerificationDataInCache) {
+      const parsedVerificationData = JSON.parse(hasVerificationDataInCache);
+
+      await authRepository.createVerificationToken(
+        email,
+        tokenHash,
+        parsedVerificationData.userId,
+        EXPIRATION_SECONDS,
+      );
+
+      await authRepository.lockResendOtp(email);
+
+      await sendEmail(email, otp);
+
+      return;
+    }
+
+    const user = await authRepository.findUserByEmail(email);
+
+    if (!user || user.isVerified) {
+      await authRepository.setUserVerifiedInCache(email);
+
+      return;
+    }
+
+    if (!user.isVerified) {
+      await authRepository.createVerificationToken(
+        email,
+        tokenHash,
+        user.id,
+        EXPIRATION_SECONDS,
+      );
+
+      await authRepository.lockResendOtp(email);
+
+      await sendEmail(email, otp);
+
+      return;
+    }
+
+    return;
   },
 
   loginUser: async ({ body, ip, userAgent }: LoginUserDTO) => {
     const { email, password } = body;
 
-    const userExist = await authRepository.findByEmail(email);
+    const userExist = await authRepository.findUserByEmail(email);
 
     const isPasswordValid = await bcrypt.compare(
       password,

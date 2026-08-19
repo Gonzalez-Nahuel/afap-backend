@@ -75,10 +75,35 @@ const options: swaggerJSDoc.Options = {
                 "No autorizado",
                 "El token ha expirado",
                 "Token inválido o mal formado",
+                "No se envio refreshToken",
+                "sesión inválida o cerrada",
+                "La sesión ha expirado",
               ],
             },
           },
-          description: "Error de autenticación relacionado con el token JWT.",
+          description:
+            "Error de autenticación relacionado con el JWT o con una sesión revocada/expirada.",
+        },
+        SessionSummary: {
+          type: "object",
+          properties: {
+            id: { type: "string", example: "sess_123" },
+            userId: { type: "string", example: "usr_456" },
+            refreshTokenHash: {
+              type: "string",
+              example: "hash_del_refresh_token",
+            },
+            userAgent: { type: "string", example: "Mozilla/5.0" },
+            ipAddress: { type: "string", example: "127.0.0.1" },
+            isRevoked: { type: "boolean", example: false },
+            expiresAt: {
+              type: "string",
+              format: "date-time",
+              example: "2026-08-21T12:00:00.000Z",
+            },
+          },
+          description:
+            "Representa la sesión persistida en Prisma. El refresh real no se guarda, solo su hash.",
         },
       },
     },

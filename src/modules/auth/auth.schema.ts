@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { email, z } from "zod";
 
 export const registerUserSchema = z.object({
   body: z.object({
@@ -59,9 +59,24 @@ export const logoutSchema = z.object({
 
 export const verifyEmailSchema = z.object({
   body: z.object({
+    email: z
+      .email({ error: "Formato de correo electrónico inválido" })
+      .max(80, "El email es demasiado largo")
+      .trim()
+      .toLowerCase(),
     token: z
       .string()
       .min(6, "El código debe tener 6 dígitos")
       .max(6, "El código debe tener 6 dígitos"),
+  }),
+});
+
+export const resendVerifyTokenSchema = z.object({
+  body: z.object({
+    email: z
+      .email({ error: "Formato de correo electrónico inválido" })
+      .max(80, "El email es demasiado largo")
+      .trim()
+      .toLowerCase(),
   }),
 });

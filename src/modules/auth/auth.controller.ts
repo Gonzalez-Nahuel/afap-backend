@@ -14,13 +14,27 @@ export const authController = {
 
   verifyEmail: async (req, res) => {
     const token = req.body.token;
+    const email = req.body.email;
 
-    const verifiedUserId = await authService.verifyEmail(token);
+    await authService.verifyEmail(token, email);
 
     return res.status(200).json({
       ok: true,
-      userId: verifiedUserId,
+      message: "Usuario verificado con éxito",
     });
+  },
+
+  resendOtp: async (req, res) => {
+    const email = req.body.email;
+
+    await authService.resendOtp(email);
+
+    return res
+      .status(200)
+      .json({
+        ok: true,
+        message: "Si el correo está registrado, se ha enviado un nuevo código",
+      });
   },
 
   login: async (req, res) => {

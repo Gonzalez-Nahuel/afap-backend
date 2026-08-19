@@ -7,6 +7,7 @@ import {
   logoutSchema,
   refreshTokenSchema,
   registerUserSchema,
+  resendVerifyTokenSchema,
   verifyEmailSchema,
 } from "./auth.schema";
 import { authMiddleware } from "@/middlewares/auth.middleware";
@@ -21,10 +22,10 @@ export const authRouter = Router();
  *     description: |
  *       Endpoint de registro clásico para crear una cuenta con `username`, `email` y `password`.
  *       El middleware `validate` aplica el schema Zod de registro al `body` con los campos requeridos antes de llegar al handler.
- *       En el servicio se verifica si el correo ya existe en Prisma; si existe, se lanza `AppError(400)` con el mensaje `El email ya está registrado`.
- *       Si no existe, se aplica `bcrypt.hash` sobre la contraseña, se genera un OTP y un `verificationToken` con expiración de 5 minutos,
- *       se persiste el usuario y la relación de verificación en la base de datos y se reenvía el código al correo del usuario mediante `Resend`.
- *       El registro no devuelve tokens ni crea sesión: solo devuelte el perfil público del usuario recién creado.
+ *       En el servicio se verifica si el correo ya existe en Prisma; si existe, se lanza un error de conflicto con el mensaje `El email ya está registrado`.
+ *       Si no existe, se aplica `bcrypt.hash` sobre la contraseña, se genera un OTP y se guarda el código temporal en Redis usando la clave `token:verification:<hash>` con TTL de 5 minutos.
+ *       Luego se crea el usuario y se envía el código al correo mediante `Resend`.
+ *       El registro no devuelve tokens ni crea una sesión activa: solo devuelve el perfil público del usuario recién creado.
  *     tags:
  *       - Auth
  *     requestBody:
@@ -66,11 +67,20 @@ export const authRouter = Router();
  *                   - Al menos un carácter especial.
  *     responses:
  *       200:
- *         description: Registro exitoso. La respuesta pública incluye id, username, email y createdAt.
+ *         description: Registro exitoso. La respuesta pública incluye id, username, email y createdAt, y siempre devuelve `ok: true`.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/UserResponse'
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   $ref: '#/components/schemas/UserResponse'
+ *               required:
+ *                 - ok
+ *                 - user
  *       400:
  *         description: |
  *           Error de entrada o conflicto lógico.
@@ -118,10 +128,71 @@ authRouter.post(
   asyncHandler(authController.register),
 );
 
+/**
+ * @openapi
+ * /api/auth/verify-email:
+ *   post:
+ *     summary: Verificar el email del usuario
+ *     description: |
+ *       Valida el código OTP enviado por email durante el registro.
+ *       Si el código coincide y aún no expiró, se activa la cuenta del usuario.
+ *     tags:
+ *       - Auth
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 minLength: 6
+ *                 maxLength: 6
+ *                 example: "123456"
+ *                 description: Código de verificación de 6 dígitos enviado al correo del usuario.
+ *     responses:
+ *       200:
+ *         description: El email fue verificado correctamente y la respuesta incluye `ok: true`.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: true
+ *                 userId:
+ *                   type: string
+ *                   example: "clx123abc"
+ *               required:
+ *                 - ok
+ *                 - userId
+ *       400:
+ *         description: Error de validación del código de verificación.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ValidationError'
+ *       401:
+ *         description: El token de verificación es inválido o expiró.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
 authRouter.post(
-  "verify-email",
+  "/verify-email",
   validate(verifyEmailSchema),
-  authController.verifyEmail,
+  asyncHandler(authController.verifyEmail),
+);
+
+authRouter.post(
+  "/resend-otp",
+  validate(resendVerifyTokenSchema),
+  asyncHandler(authController.resendOtp),
 );
 
 /**
@@ -135,7 +206,8 @@ authRouter.post(
  *       - `web`: devuelve el `accessToken` en el body y guarda el `refreshToken` en una cookie `HttpOnly` llamada `refreshToken`.
  *       - `mobile`: devuelve `accessToken` y `refreshToken` en el body de la respuesta JSON.
  *
- *       La sesión se registra en la base de datos con el `hashRefresh`, el `ipAddress` y el `userAgent` capturados por el backend.
+ *       La sesión real se guarda en Prisma en el modelo `Session`: se almacena el `refreshTokenHash`, `userAgent`, `ipAddress`, `expiresAt` y `isRevoked`.
+ *       El refresh token en bruto nunca se guarda en base de datos; solo se guarda su hash generado con `hashToken`.
  *     tags:
  *       - Auth
  *     parameters:
@@ -171,7 +243,7 @@ authRouter.post(
  *                 description: Contraseña de la cuenta del usuario.
  *     responses:
  *       200:
- *         description: Autenticación exitosa. El usuario ha iniciado sesión correctamente.
+ *         description: Autenticación exitosa. La respuesta incluye `ok: true` y el payload de sesión adecuado para cada cliente.
  *         headers:
  *           Set-Cookie:
  *             schema:
@@ -184,6 +256,9 @@ authRouter.post(
  *                 - type: object
  *                   description: Respuesta para clientes web.
  *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: true
  *                     user:
  *                       $ref: '#/components/schemas/UserResponse'
  *                     accessToken:
@@ -191,11 +266,15 @@ authRouter.post(
  *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *                       description: Token JWT para autenticar futuras solicitudes. Válido por 15 minutos.
  *                   required:
+ *                     - ok
  *                     - user
  *                     - accessToken
  *                 - type: object
  *                   description: Respuesta para clientes móviles.
  *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: true
  *                     user:
  *                       $ref: '#/components/schemas/UserResponse'
  *                     accessToken:
@@ -207,6 +286,7 @@ authRouter.post(
  *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *                       description: Token para renovar el accessToken cuando expire. Válido por 7 días.
  *                   required:
+ *                     - ok
  *                     - user
  *                     - accessToken
  *                     - refreshToken
@@ -268,11 +348,20 @@ authRouter.post(
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Información del usuario obtenida exitosamente.
+ *         description: Información del usuario obtenida exitosamente. La respuesta incluye `ok: true`.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/UserResponse'
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: true
+ *                 user:
+ *                   $ref: '#/components/schemas/UserResponse'
+ *               required:
+ *                 - ok
+ *                 - user
  *       401:
  *         description: Error de autenticación. Token no incluido, inválido, expirado o mal formado.
  *         content:
@@ -315,7 +404,8 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *       - `web`: el refresh se toma desde la cookie `refreshToken` y la nueva cookie se reemplaza por la nueva sesión.
  *       - `mobile`: el refresh se envía en el body del request y el nuevo refresh se devuelve en el JSON.
  *
- *       La sesión anterior se revoca y se crea una nueva sesión con el `hashRefresh` actualizado, el `ipAddress` y el `userAgent` actuales.
+ *       La sesión anterior se revoca y se crea una nueva sesión con el `refreshTokenHash` actualizado, el `ipAddress` y el `userAgent` actuales.
+ *       Si un refresh token ya revocado se reutiliza, el backend detecta la sesión invalidada, revoca todas las sesiones del usuario y responde con `401` para mitigar la reutilización de tokens.
  *     tags:
  *       - Auth
  *     parameters:
@@ -340,7 +430,7 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *                 description: Refresh token enviado por clientes móviles. Este campo es opcional para web, porque el valor se toma desde la cookie.
  *     responses:
  *       200:
- *         description: Access token y refresh token renovados correctamente.
+ *         description: Access token y refresh token renovados correctamente. La respuesta incluye `ok: true`.
  *         headers:
  *           Set-Cookie:
  *             schema:
@@ -353,15 +443,22 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *                 - type: object
  *                   description: Respuesta para clientes web.
  *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: true
  *                     accessToken:
  *                       type: string
  *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *                       description: Nuevo token JWT de acceso válido por 15 minutos.
  *                   required:
+ *                     - ok
  *                     - accessToken
  *                 - type: object
  *                   description: Respuesta para clientes móviles.
  *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: true
  *                     accessToken:
  *                       type: string
  *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -371,6 +468,7 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
  *                       description: Nuevo refreshToken para el cliente móvil.
  *                   required:
+ *                     - ok
  *                     - accessToken
  *                     - refreshToken
  *       400:
@@ -432,7 +530,7 @@ authRouter.post(
  *       - `web`: el `refreshToken` se toma desde la cookie `refreshToken` y el backend limpia esa cookie al responder.
  *       - `mobile`: el `refreshToken` puede enviarse en el body para revocar la sesión activa.
  *
- *       En ambos casos, el backend revoca la sesión asociada al `refreshToken` hashado y responde con `ok: true`.
+ *       En ambos casos, el backend encuentra la sesión por su `refreshTokenHash` en Prisma y la marca como `isRevoked`. Si la sesión no existe, se limpia la cookie y la respuesta sigue siendo exitosa.
  *     tags:
  *       - Auth
  *     parameters:
@@ -457,7 +555,7 @@ authRouter.post(
  *                 description: Refresh token opcional para clientes móviles. Para web, se toma desde la cookie.
  *     responses:
  *       200:
- *         description: Sesión cerrada correctamente.
+ *         description: Sesión cerrada correctamente. La respuesta incluye `ok: true`.
  *         headers:
  *           Set-Cookie:
  *             schema:

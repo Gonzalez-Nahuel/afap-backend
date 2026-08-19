@@ -1,10 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import type {
   CreateSessionDTO,
-  CreateVerificationTokenDto,
   RegisterUserDTO,
+  VerificationDataDto,
 } from "./auth.dto";
-import { string } from "zod";
 import { redis } from "@/lib/redis";
 
 export const authRepository = {
@@ -28,35 +27,80 @@ export const authRepository = {
     });
   },
 
-  findByEmail: async (email: string) => {
+  findUserByEmail: async (email: string) => {
     return await prisma.user.findUnique({ where: { email } });
   },
 
   createVerificationToken: async (
+    email: string,
     token: string,
     userId: string,
     ttl: number,
   ) => {
-    await redis.set(`token:verification:${token}`, userId, "EX", ttl);
+    await redis.set(
+      `auth:verification:${email}`,
+      JSON.stringify({ token, userId, attemps: 0 }),
+      "EX",
+      ttl,
+    );
   },
 
-  getUserIdByToken: async (token: string) => {
-    return await redis.get(`token:verification:${token}`);
+  lockResendOtp: async (email: string) => {
+    return await redis.set(`lock:resend:${email}`, "1", "EX", 60);
   },
 
-  verifyUserAccount: async (id: string) => {
-    return await prisma.$transaction(async (tx) => {
-      const userUpdated = await tx.user.update({
-        where: { id },
-        data: { isVerified: true },
-        select: {
-          id: true,
-        },
-      });
+  canResendOtp: async (email: string) => {
+    const exists = await redis.exists(`lock:resend:${email}`);
 
-      await tx.verificationToken.deleteMany({ where: { userId: id } });
+    return exists === 0;
+  },
 
-      return userUpdated;
+  setUserVerifiedInCache: async (email: string) => {
+    const ttl = 60 * 15;
+
+    await redis.set(`user:status:verified:${email}`, "1", "EX", ttl);
+  },
+
+  isAlreadyVerifiedInCache: async (email: string) => {
+    const exists = await redis.exists(`user:status:verified:${email}`);
+
+    return exists === 1;
+  },
+
+  getVerificationUserData: async (email: string) => {
+    return await redis.get(`auth:verification:${email}`);
+  },
+
+  incrementVerificationAttemps: async (
+    email: string,
+    data: VerificationDataDto,
+  ) => {
+    const ttlRemaining = await redis.ttl(`auth:verification:${email}`);
+
+    if (ttlRemaining === 0) return;
+
+    const verificationData = {
+      ...data,
+      attemps: data.attemps + 1,
+    };
+
+    return await redis.set(
+      `auth:verification:${email}`,
+      JSON.stringify(verificationData),
+      "EX",
+      ttlRemaining,
+    );
+  },
+
+  verifyUserAccount: async (id: string, email: string) => {
+    await redis.del(`auth:verification:${email}`);
+
+    await prisma.user.update({
+      where: { id },
+      data: { isVerified: true },
+      select: {
+        id: true,
+      },
     });
   },
 

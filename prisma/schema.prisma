@@ -113,19 +113,6 @@ model User {
 
   persons Person[]
   session Session[]
-  verificationToken VerificationToken[]
-}
-
-model VerificationToken {
-  id String @id @default(uuid())
-  tokenHash String @unique
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-
-  userId String
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, tokenHash, id])
 }
 
 model Session {

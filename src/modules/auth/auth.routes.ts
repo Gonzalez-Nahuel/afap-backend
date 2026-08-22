@@ -18,16 +18,10 @@ export const authRouter = Router();
  * @openapi
  * /api/auth/register:
  *   post:
- *     summary: Registrar un nuevo usuario
- *     description: |
- *       Endpoint de registro clásico para crear una cuenta con `username`, `email` y `password`.
- *       El middleware `validate` aplica el schema Zod de registro al `body` con los campos requeridos antes de llegar al handler.
- *       En el servicio se verifica si el correo ya existe en Prisma; si existe, se lanza un error de conflicto con el mensaje `El email ya está registrado`.
- *       Si no existe, se aplica `bcrypt.hash` sobre la contraseña, se genera un OTP y se guarda el código temporal en Redis usando la clave `token:verification:<hash>` con TTL de 5 minutos.
- *       Luego se crea el usuario y se envía el código al correo mediante `Resend`.
- *       El registro no devuelve tokens ni crea una sesión activa: solo devuelve el perfil público del usuario recién creado.
  *     tags:
  *       - Auth
+ *     summary: Registrar un nuevo usuario
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -44,84 +38,142 @@ export const authRouter = Router();
  *                 minLength: 6
  *                 maxLength: 50
  *                 pattern: "^[a-zA-Z0-9_]+$"
- *                 example: "pepe_g"
- *                 description: Nombre visible del usuario. Debe tener entre 6 y 50 caracteres y aceptar solo letras, números y guiones bajos.
+ *                 example: "pepe_12"
  *               email:
  *                 type: string
  *                 format: email
  *                 maxLength: 80
- *                 example: "pepe.dev@example.com"
- *                 description: Dirección de correo electrónico única y válida. El valor se normaliza a minúsculas antes de consultarse.
+ *                 example: "pepe@example.com"
  *               password:
  *                 type: string
- *                 format: password
  *                 minLength: 8
  *                 maxLength: 100
  *                 example: "SecureP@ss123"
- *                 description: |
- *                   Contraseña con complejidad requerida:
- *                   - Al menos 8 caracteres.
- *                   - Al menos una letra mayúscula.
- *                   - Al menos una letra minúscula.
- *                   - Al menos un número.
- *                   - Al menos un carácter especial.
  *     responses:
- *       200:
- *         description: Registro exitoso. La respuesta pública incluye id, username, email y createdAt, y siempre devuelve `ok: true`.
+ *       "200":
+ *         description: Registro exitoso.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
+ *               required:
+ *                 - ok
+ *                 - user
  *               properties:
  *                 ok:
  *                   type: boolean
  *                   example: true
  *                 user:
- *                   $ref: '#/components/schemas/UserResponse'
+ *                   type: object
+ *                   required:
+ *                     - id
+ *                     - username
+ *                     - email
+ *                     - createdAt
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     username:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *       "400":
+ *         description: Error de validación de Zod.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
  *               required:
  *                 - ok
- *                 - user
- *       400:
- *         description: |
- *           Error de entrada o conflicto lógico.
- *           Puede venir de Zod (`Error de validación`) o del servicio cuando el email ya existe (`El email ya está registrado`).
+ *                 - code
+ *                 - message
+ *                 - errors
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: VALIDATION_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: Error de validación
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     required:
+ *                       - field
+ *                       - message
+ *                     properties:
+ *                       field:
+ *                         type: string
+ *                       message:
+ *                         type: string
+ *       "409":
+ *         description: El email ya está registrado.
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
- *                 - $ref: '#/components/schemas/ValidationError'
- *                 - $ref: '#/components/schemas/ApiError'
- *             examples:
- *               validation:
- *                 summary: Validación del cuerpo
- *                 value:
- *                   ok: false
- *                   message: "Error de validación"
- *                   errors:
- *                     - field: "body.email"
- *                       message: "Formato de correo electrónico inválido"
- *               duplicateEmail:
- *                 summary: Email duplicado
- *                 value:
- *                   ok: false
- *                   message: "El email ya está registrado"
- *       502:
- *         description: El email de verificación no pudo enviarse a través de Resend. La capa de servicio lo reporta como error de gateway de correo.
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: USER_EXISTS
+ *                 message:
+ *                   type: string
+ *                   example: El email ya está registrado
+ *       "502":
+ *         description: Solo si falla `sendEmail()` al intentar enviar el código de verificación.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ApiError'
- *             example:
- *               ok: false
- *               message: "No se pudo enviar el email, reenviar el código"
- *       500:
- *         description: Error inesperado del servidor o falla persistente de Prisma al crear el usuario.
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: EMAIL_SEND_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: No se pudo enviar el email, reenviar el código
+ *       "500":
+ *         description: Error inesperado del servidor.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ApiError'
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: UNKNOWN_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: Internal server error
  */
-
 authRouter.post(
   "/register",
   validate(registerUserSchema),
@@ -132,12 +184,10 @@ authRouter.post(
  * @openapi
  * /api/auth/verify-email:
  *   post:
- *     summary: Verificar el email del usuario
- *     description: |
- *       Valida el código OTP enviado por email durante el registro.
- *       Si el código coincide y aún no expiró, se activa la cuenta del usuario.
  *     tags:
  *       - Auth
+ *     summary: Verificar el email del usuario
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -145,43 +195,124 @@ authRouter.post(
  *           schema:
  *             type: object
  *             required:
+ *               - email
  *               - token
  *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 maxLength: 80
  *               token:
  *                 type: string
  *                 minLength: 6
  *                 maxLength: 6
- *                 example: "123456"
- *                 description: Código de verificación de 6 dígitos enviado al correo del usuario.
  *     responses:
- *       200:
- *         description: El email fue verificado correctamente y la respuesta incluye `ok: true`.
+ *       "200":
+ *         description: Verificación exitosa.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
+ *               required:
+ *                 - ok
+ *                 - message
  *               properties:
  *                 ok:
  *                   type: boolean
  *                   example: true
- *                 userId:
+ *                 message:
  *                   type: string
- *                   example: "clx123abc"
+ *                   example: Usuario verificado con éxito
+ *       "400":
+ *         description: Error de validación del body.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
  *               required:
  *                 - ok
- *                 - userId
- *       400:
- *         description: Error de validación del código de verificación.
+ *                 - code
+ *                 - message
+ *                 - errors
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: VALIDATION_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: Error de validación
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       field:
+ *                         type: string
+ *                       message:
+ *                         type: string
+ *       "401":
+ *         description: El código de verificación es inválido.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ValidationError'
- *       401:
- *         description: El token de verificación es inválido o expiró.
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: VERIFICATION_TOKEN_INVALID
+ *                 message:
+ *                   type: string
+ *                   example: EL token de verificación es inválido
+ *       "404":
+ *         description: El token de verificación no existe o expiró.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ApiError'
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: VERIFICATION_TOKEN_NOT_FOUND_OR_EXPIRED
+ *                 message:
+ *                   type: string
+ *                   example: EL token de verificación no existe o ha expirado. Solicita uno nuevo
+ *       "429":
+ *         description: Se excedió el límite de intentos.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: TOO_MANY_ATTEMPS
+ *                 message:
+ *                   type: string
+ *                   example: Has superado el límite de intentos permitidos. Solicita un nuevo código
  */
 authRouter.post(
   "/verify-email",
@@ -189,6 +320,115 @@ authRouter.post(
   asyncHandler(authController.verifyEmail),
 );
 
+/**
+ * @openapi
+ * /api/auth/resend-otp:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Reenviar código de verificación
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 maxLength: 80
+ *     responses:
+ *       "200":
+ *         description: Reenvío exitoso o respuesta silenciosa cuando el correo no existe o ya está verificado.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Si el correo está registrado, se ha enviado un nuevo código
+ *       "400":
+ *         description: Error de validación del body.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *                 - errors
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: VALIDATION_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: Error de validación
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       field:
+ *                         type: string
+ *                       message:
+ *                         type: string
+ *       "429":
+ *         description: El usuario solicitó un nuevo código demasiado pronto.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: TOO_MANY_REQUEST
+ *                 message:
+ *                   type: string
+ *                   example: Por favor, espera 60 segundos antes de solicitar un nuevo código.
+ *       "502":
+ *         description: No se pudo enviar el email de verificación.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: EMAIL_SEND_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: No se pudo enviar el email, reenviar el código
+ */
 authRouter.post(
   "/resend-otp",
   validate(resendVerifyTokenSchema),
@@ -199,26 +439,19 @@ authRouter.post(
  * @openapi
  * /api/auth/login:
  *   post:
- *     summary: Iniciar sesión
- *     description: |
- *       Autentica un usuario con sus credenciales y devuelve el par de tokens necesario para mantener la sesión.
- *       El comportamiento depende del header `x-client-type`:
- *       - `web`: devuelve el `accessToken` en el body y guarda el `refreshToken` en una cookie `HttpOnly` llamada `refreshToken`.
- *       - `mobile`: devuelve `accessToken` y `refreshToken` en el body de la respuesta JSON.
- *
- *       La sesión real se guarda en Prisma en el modelo `Session`: se almacena el `refreshTokenHash`, `userAgent`, `ipAddress`, `expiresAt` y `isRevoked`.
- *       El refresh token en bruto nunca se guarda en base de datos; solo se guarda su hash generado con `hashToken`.
  *     tags:
  *       - Auth
+ *     summary: Iniciar sesión
+ *     security: []
  *     parameters:
  *       - in: header
  *         name: x-client-type
  *         required: true
  *         schema:
  *           type: string
- *           enum: [web, mobile]
- *         description: Tipo de cliente realizando la solicitud. El flujo difiere entre navegador y aplicación móvil.
- *         example: web
+ *           enum:
+ *             - web
+ *             - mobile
  *     requestBody:
  *       required: true
  *       content:
@@ -233,101 +466,138 @@ authRouter.post(
  *                 type: string
  *                 format: email
  *                 maxLength: 80
- *                 example: "pepe.dev@example.com"
- *                 description: Dirección de correo electrónico registrada en la plataforma.
  *               password:
  *                 type: string
  *                 minLength: 1
  *                 maxLength: 100
- *                 example: "SecureP@ss123"
- *                 description: Contraseña de la cuenta del usuario.
  *     responses:
- *       200:
- *         description: Autenticación exitosa. La respuesta incluye `ok: true` y el payload de sesión adecuado para cada cliente.
+ *       "200":
+ *         description: Inicio de sesión exitoso.
  *         headers:
  *           Set-Cookie:
  *             schema:
  *               type: string
- *             description: Solo para clientes web. Guarda el refreshToken en una cookie `HttpOnly` con `sameSite=strict` y duración de 7 días.
+ *             description: Solo en cliente web; se guarda la cookie refreshToken.
  *         content:
  *           application/json:
  *             schema:
  *               oneOf:
  *                 - type: object
- *                   description: Respuesta para clientes web.
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: true
- *                     user:
- *                       $ref: '#/components/schemas/UserResponse'
- *                     accessToken:
- *                       type: string
- *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                       description: Token JWT para autenticar futuras solicitudes. Válido por 15 minutos.
  *                   required:
  *                     - ok
  *                     - user
  *                     - accessToken
- *                 - type: object
- *                   description: Respuesta para clientes móviles.
  *                   properties:
  *                     ok:
  *                       type: boolean
  *                       example: true
  *                     user:
- *                       $ref: '#/components/schemas/UserResponse'
+ *                       type: object
+ *                       required:
+ *                         - id
+ *                         - username
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         username:
+ *                           type: string
  *                     accessToken:
  *                       type: string
- *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                       description: Token JWT para autenticar futuras solicitudes. Válido por 15 minutos.
- *                     refreshToken:
- *                       type: string
- *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                       description: Token para renovar el accessToken cuando expire. Válido por 7 días.
+ *                 - type: object
  *                   required:
  *                     - ok
  *                     - user
  *                     - accessToken
  *                     - refreshToken
- *       400:
- *         description: Error en la validación de los datos (ZodError) o credenciales inválidas.
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: true
+ *                     user:
+ *                       type: object
+ *                       required:
+ *                         - id
+ *                         - username
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         username:
+ *                           type: string
+ *                     accessToken:
+ *                       type: string
+ *                     refreshToken:
+ *                       type: string
+ *       "400":
+ *         description: Error de validación del header o del body.
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
- *                 - $ref: '#/components/schemas/ValidationError'
- *                 - $ref: '#/components/schemas/ApiError'
- *             examples:
- *               validationError:
- *                 summary: Error de validación
- *                 value:
- *                   ok: false
- *                   message: "Error de validación"
- *                   errors:
- *                     - field: "body.email"
- *                       message: "Formato de correo electrónico inválido"
- *               invalidCredentials:
- *                 summary: Credenciales inválidas
- *                 value:
- *                   ok: false
- *                   message: "Credenciales Inválidas"
- *               invalidClientType:
- *                 summary: Tipo de cliente inválido
- *                 value:
- *                   ok: false
- *                   message: "Error de validación"
- *                   errors:
- *                     - field: "headers.x-client-type"
- *                       message: "X-Client-type debe ser 'web' o 'mobile'"
- *       500:
- *         description: Error inesperado en el servidor.
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *                 - errors
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: VALIDATION_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: Error de validación
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       field:
+ *                         type: string
+ *                       message:
+ *                         type: string
+ *       "401":
+ *         description: Credenciales inválidas.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ApiError'
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: INVALID_CREDENTIALS
+ *                 message:
+ *                   type: string
+ *                   example: Credenciales inválidas
+ *       "403":
+ *         description: La cuenta no está verificada.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: USER_NOT_VERIFIED
+ *                 message:
+ *                   type: string
+ *                   example: La cuenta aún no ha sido verificada
  */
-
 authRouter.post(
   "/login",
   validate(loginUserSchema),
@@ -338,58 +608,101 @@ authRouter.post(
  * @openapi
  * /api/auth/me:
  *   get:
- *     summary: Obtener información del usuario autenticado
- *     description: |
- *       Devuelve los datos del usuario actualmente autenticado.
- *       Requiere un token de acceso válido en el header Authorization con formato: Bearer <accessToken>
  *     tags:
  *       - Auth
+ *     summary: Obtener información del usuario autenticado
  *     security:
  *       - bearerAuth: []
  *     responses:
- *       200:
- *         description: Información del usuario obtenida exitosamente. La respuesta incluye `ok: true`.
+ *       "200":
+ *         description: Usuario autenticado.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
+ *               required:
+ *                 - ok
+ *                 - user
  *               properties:
  *                 ok:
  *                   type: boolean
  *                   example: true
  *                 user:
- *                   $ref: '#/components/schemas/UserResponse'
- *               required:
- *                 - ok
- *                 - user
- *       401:
- *         description: Error de autenticación. Token no incluido, inválido, expirado o mal formado.
+ *                   type: object
+ *                   required:
+ *                     - id
+ *                     - username
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     username:
+ *                       type: string
+ *       "401":
+ *         description: Token requerido o inválido.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/TokenError'
- *             examples:
- *               noToken:
- *                 summary: Token no incluido en el header
- *                 value:
- *                   ok: false
- *                   message: "No autorizado"
- *               expiredToken:
- *                 summary: Token expirado
- *                 value:
- *                   ok: false
- *                   message: "El token ha expirado"
- *               invalidToken:
- *                 summary: Token inválido o mal formado
- *                 value:
- *                   ok: false
- *                   message: "Token inválido o mal formado"
- *       500:
- *         description: Error inesperado en el servidor.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiError'
+ *               oneOf:
+ *                 - type: object
+ *                   required:
+ *                     - ok
+ *                     - code
+ *                     - message
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: false
+ *                     code:
+ *                       type: string
+ *                       example: MISSING_TOKEN
+ *                     message:
+ *                       type: string
+ *                       example: Token requerido
+ *                 - type: object
+ *                   required:
+ *                     - ok
+ *                     - code
+ *                     - message
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: false
+ *                     code:
+ *                       type: string
+ *                       example: INVALID_TOKEN
+ *                     message:
+ *                       type: string
+ *                       example: Token inválido
+ *                 - type: object
+ *                   required:
+ *                     - ok
+ *                     - code
+ *                     - message
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: false
+ *                     code:
+ *                       type: string
+ *                       example: TOKEN_EXPIRED_ERROR
+ *                     message:
+ *                       type: string
+ *                       example: El token ha expirado
+ *                 - type: object
+ *                   required:
+ *                     - ok
+ *                     - code
+ *                     - message
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: false
+ *                     code:
+ *                       type: string
+ *                       example: TOKEN_ERROR
+ *                     message:
+ *                       type: string
+ *                       example: Token inválido o mal formado
  */
 authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
 
@@ -397,26 +710,19 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  * @openapi
  * /api/auth/refresh:
  *   post:
- *     summary: Renovar tokens de autenticación
- *     description: |
- *       Renueva el `accessToken` y, en cada solicitud, rota también el `refreshToken`.
- *       La forma de leer el token depende del cliente:
- *       - `web`: el refresh se toma desde la cookie `refreshToken` y la nueva cookie se reemplaza por la nueva sesión.
- *       - `mobile`: el refresh se envía en el body del request y el nuevo refresh se devuelve en el JSON.
- *
- *       La sesión anterior se revoca y se crea una nueva sesión con el `refreshTokenHash` actualizado, el `ipAddress` y el `userAgent` actuales.
- *       Si un refresh token ya revocado se reutiliza, el backend detecta la sesión invalidada, revoca todas las sesiones del usuario y responde con `401` para mitigar la reutilización de tokens.
  *     tags:
  *       - Auth
+ *     summary: Renovar tokens
+ *     security: []
  *     parameters:
  *       - in: header
  *         name: x-client-type
  *         required: true
  *         schema:
  *           type: string
- *           enum: [web, mobile]
- *         description: Tipo de cliente que solicita la renovación de tokens.
- *         example: web
+ *           enum:
+ *             - web
+ *             - mobile
  *     requestBody:
  *       required: false
  *       content:
@@ -426,91 +732,122 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *             properties:
  *               refreshToken:
  *                 type: string
- *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                 description: Refresh token enviado por clientes móviles. Este campo es opcional para web, porque el valor se toma desde la cookie.
  *     responses:
- *       200:
- *         description: Access token y refresh token renovados correctamente. La respuesta incluye `ok: true`.
+ *       "200":
+ *         description: Refresh exitoso.
  *         headers:
  *           Set-Cookie:
  *             schema:
  *               type: string
- *             description: Solo para clientes web. Reemplaza la cookie `refreshToken` por el nuevo refresh rotado.
+ *             description: Solo para cliente web; se reemplaza la cookie refreshToken.
  *         content:
  *           application/json:
  *             schema:
  *               oneOf:
  *                 - type: object
- *                   description: Respuesta para clientes web.
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: true
- *                     accessToken:
- *                       type: string
- *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                       description: Nuevo token JWT de acceso válido por 15 minutos.
  *                   required:
  *                     - ok
  *                     - accessToken
- *                 - type: object
- *                   description: Respuesta para clientes móviles.
  *                   properties:
  *                     ok:
  *                       type: boolean
  *                       example: true
  *                     accessToken:
  *                       type: string
- *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                       description: Nuevo token JWT de acceso válido por 15 minutos.
- *                     refreshToken:
- *                       type: string
- *                       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                       description: Nuevo refreshToken para el cliente móvil.
+ *                 - type: object
  *                   required:
  *                     - ok
  *                     - accessToken
  *                     - refreshToken
- *       400:
- *         description: Error de validación en la cabecera o en el body de la solicitud.
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: true
+ *                     accessToken:
+ *                       type: string
+ *                     refreshToken:
+ *                       type: string
+ *       "400":
+ *         description: Error de validación del header o del body.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *                 - errors
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: VALIDATION_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: Error de validación
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       field:
+ *                         type: string
+ *                       message:
+ *                         type: string
+ *       "401":
+ *         description: Refresh token ausente o sesión inválida/expirada.
  *         content:
  *           application/json:
  *             schema:
  *               oneOf:
- *                 - $ref: '#/components/schemas/ValidationError'
- *                 - $ref: '#/components/schemas/ApiError'
- *             examples:
- *               missingClientType:
- *                 summary: Falta x-client-type en la cabecera
- *                 value:
- *                   ok: false
- *                   message: "Error de validación"
- *                   errors:
- *                     - field: "headers.x-client-type"
- *                       message: "X-Client-type debe ser 'web' o 'mobile'"
- *       401:
- *         description: Refresh token inválido, expirado, ausente o no autorizado.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/TokenError'
- *             examples:
- *               missingRefreshTokenWeb:
- *                 summary: Falta refreshToken en la cookie para cliente web
- *                 value:
- *                   ok: false
- *                   message: "No se envio refreshToken"
- *               invalidRefreshToken:
- *                 summary: Refresh token inválido o expirado
- *                 value:
- *                   ok: false
- *                   message: "Refresh token inválido"
- *       500:
- *         description: Error inesperado en el servidor.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiError'
+ *                 - type: object
+ *                   required:
+ *                     - ok
+ *                     - code
+ *                     - message
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: false
+ *                     code:
+ *                       type: string
+ *                       example: MISSING_TOKEN
+ *                     message:
+ *                       type: string
+ *                       example: No se envio refreshToken
+ *                 - type: object
+ *                   required:
+ *                     - ok
+ *                     - code
+ *                     - message
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: false
+ *                     code:
+ *                       type: string
+ *                       example: INVALID_SESSION
+ *                     message:
+ *                       type: string
+ *                       example: sesión inválida o cerrada
+ *                 - type: object
+ *                   required:
+ *                     - ok
+ *                     - code
+ *                     - message
+ *                   properties:
+ *                     ok:
+ *                       type: boolean
+ *                       example: false
+ *                     code:
+ *                       type: string
+ *                       example: EXPIRED_SESSION
+ *                     message:
+ *                       type: string
+ *                       example: La sesión ha expirado
  */
 authRouter.post(
   "/refresh",
@@ -522,26 +859,19 @@ authRouter.post(
  * @openapi
  * /api/auth/logout:
  *   post:
- *     summary: Cerrar sesión
- *     description: |
- *       Finaliza la sesión actual invalidando la sesión asociada al `refreshToken`.
- *       El endpoint no necesita el `accessToken` en el header para cerrar sesión.
- *       El flujo depende del cliente:
- *       - `web`: el `refreshToken` se toma desde la cookie `refreshToken` y el backend limpia esa cookie al responder.
- *       - `mobile`: el `refreshToken` puede enviarse en el body para revocar la sesión activa.
- *
- *       En ambos casos, el backend encuentra la sesión por su `refreshTokenHash` en Prisma y la marca como `isRevoked`. Si la sesión no existe, se limpia la cookie y la respuesta sigue siendo exitosa.
  *     tags:
  *       - Auth
+ *     summary: Cerrar sesión
+ *     security: []
  *     parameters:
  *       - in: header
  *         name: x-client-type
  *         required: true
  *         schema:
  *           type: string
- *           enum: [web, mobile]
- *         description: Tipo de cliente que solicita el cierre de sesión.
- *         example: web
+ *           enum:
+ *             - web
+ *             - mobile
  *     requestBody:
  *       required: false
  *       content:
@@ -551,40 +881,54 @@ authRouter.post(
  *             properties:
  *               refreshToken:
  *                 type: string
- *                 example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *                 description: Refresh token opcional para clientes móviles. Para web, se toma desde la cookie.
  *     responses:
- *       200:
- *         description: Sesión cerrada correctamente. La respuesta incluye `ok: true`.
+ *       "200":
+ *         description: Cierre de sesión exitoso.
  *         headers:
  *           Set-Cookie:
  *             schema:
  *               type: string
- *             description: Solo para clientes web. Elimina la cookie `refreshToken` del navegador.
+ *             description: Solo para cliente web; elimina la cookie refreshToken.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
+ *               required:
+ *                 - ok
  *               properties:
  *                 ok:
  *                   type: boolean
  *                   example: true
- *               required:
- *                 - ok
- *       400:
+ *       "400":
  *         description: Error de validación del header o del body.
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
- *                 - $ref: '#/components/schemas/ValidationError'
- *                 - $ref: '#/components/schemas/ApiError'
- *       500:
- *         description: Error inesperado en el servidor.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiError'
+ *               type: object
+ *               required:
+ *                 - ok
+ *                 - code
+ *                 - message
+ *                 - errors
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: false
+ *                 code:
+ *                   type: string
+ *                   example: VALIDATION_ERROR
+ *                 message:
+ *                   type: string
+ *                   example: Error de validación
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       field:
+ *                         type: string
+ *                       message:
+ *                         type: string
  */
 authRouter.post(
   "/logout",

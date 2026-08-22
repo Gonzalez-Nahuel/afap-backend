@@ -29,8 +29,8 @@ const options: swaggerJSDoc.Options = {
           type: "object",
           properties: {
             id: { type: "string", example: "usr_clz123456" },
-            username: { type: "string", example: "pepito" },
-            email: { type: "string", example: "pepito@gmail.com" },
+            username: { type: "string", example: "pepe_12" },
+            email: { type: "string", example: "pepe@example.com" },
             createdAt: {
               type: "string",
               format: "date-time",
@@ -42,13 +42,15 @@ const options: swaggerJSDoc.Options = {
           type: "object",
           properties: {
             ok: { type: "boolean", example: false },
-            message: { type: "string", example: "Credenciales Inválidas" },
+            code: { type: "string", example: "INVALID_CREDENTIALS" },
+            message: { type: "string", example: "Credenciales inválidas" },
           },
         },
         ValidationError: {
           type: "object",
           properties: {
             ok: { type: "boolean", example: false },
+            code: { type: "string", example: "VALIDATION_ERROR" },
             message: { type: "string", example: "Error de validación" },
             errors: {
               type: "array",
@@ -69,10 +71,23 @@ const options: swaggerJSDoc.Options = {
           type: "object",
           properties: {
             ok: { type: "boolean", example: false },
+            code: {
+              type: "string",
+              enum: [
+                "MISSING_TOKEN",
+                "INVALID_TOKEN",
+                "TOKEN_EXPIRED_ERROR",
+                "TOKEN_ERROR",
+                "MISSING_TOKEN",
+                "INVALID_SESSION",
+                "EXPIRED_SESSION",
+              ],
+            },
             message: {
               type: "string",
               enum: [
-                "No autorizado",
+                "Token requerido",
+                "Token inválido",
                 "El token ha expirado",
                 "Token inválido o mal formado",
                 "No se envio refreshToken",
@@ -82,7 +97,7 @@ const options: swaggerJSDoc.Options = {
             },
           },
           description:
-            "Error de autenticación relacionado con el JWT o con una sesión revocada/expirada.",
+            "Error de autenticación relacionado con JWT o con sesiones de refresh inválidas/expiradas.",
         },
         SessionSummary: {
           type: "object",

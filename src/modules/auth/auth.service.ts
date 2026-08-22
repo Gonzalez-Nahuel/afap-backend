@@ -19,6 +19,7 @@ import { generateOTP } from "@/lib/generate-otp-code";
 import { sendEmail } from "@/lib/send-email";
 import { resendVerifyTokenSchema } from "./auth.schema";
 import { email } from "zod";
+import { authCache } from "./auth.cache";
 
 const DUMMY_HASH =
   "$2b$10$CwTycUXWue0Thq9StjUM0uJ8s6VjWaVn2yXhH3pk.XUL8/l6nR1Aq";
@@ -43,14 +44,16 @@ export const authService = {
 
     const user = await authRepository.createUser(userPayload);
 
-    await authRepository.createVerificationToken(
+    await authCache.deleteUserVerifiedInCache(data.email);
+
+    await authCache.createVerificationToken(
       data.email,
       tokenHash,
       user.id,
       EXPIRATION_SECONDS,
     );
 
-    await authRepository.lockResendOtp(data.email);
+    await authCache.lockResendOtp(data.email);
 
     await sendEmail(data.email, otp);
 
@@ -60,8 +63,7 @@ export const authService = {
   verifyEmail: async (token: string, email: string) => {
     const tokenHash = hashToken(token);
 
-    const verificationData =
-      await authRepository.getVerificationUserData(email);
+    const verificationData = await authCache.getVerificationUserData(email);
 
     if (!verificationData)
       throw new AppError(
@@ -81,7 +83,7 @@ export const authService = {
       );
 
     if (parsedVerificationData.token !== tokenHash) {
-      await authRepository.incrementVerificationAttemps(
+      await authCache.incrementVerificationAttemps(
         email,
         parsedVerificationData,
       );
@@ -93,6 +95,8 @@ export const authService = {
       );
     }
 
+    await authCache.deleteVerificationToken(email);
+
     await authRepository.verifyUserAccount(
       parsedVerificationData.userId,
       email,
@@ -102,7 +106,7 @@ export const authService = {
   },
 
   resendOtp: async (email: string) => {
-    const canResendOtp = await authRepository.canResendOtp(email);
+    const canResendOtp = await authCache.canResendOtp(email);
 
     if (!canResendOtp)
       throw new AppError(
@@ -112,7 +116,7 @@ export const authService = {
       );
 
     const isAlreadyVerifiedInCache =
-      await authRepository.isAlreadyVerifiedInCache(email);
+      await authCache.isAlreadyVerifiedInCache(email);
 
     if (isAlreadyVerifiedInCache) return;
 
@@ -121,19 +125,19 @@ export const authService = {
     const EXPIRATION_SECONDS = 15 * 60;
 
     const hasVerificationDataInCache =
-      await authRepository.getVerificationUserData(email);
+      await authCache.getVerificationUserData(email);
 
     if (hasVerificationDataInCache) {
       const parsedVerificationData = JSON.parse(hasVerificationDataInCache);
 
-      await authRepository.createVerificationToken(
+      await authCache.createVerificationToken(
         email,
         tokenHash,
         parsedVerificationData.userId,
         EXPIRATION_SECONDS,
       );
 
-      await authRepository.lockResendOtp(email);
+      await authCache.lockResendOtp(email);
 
       await sendEmail(email, otp);
 
@@ -143,20 +147,20 @@ export const authService = {
     const user = await authRepository.findUserByEmail(email);
 
     if (!user || user.isVerified) {
-      await authRepository.setUserVerifiedInCache(email);
+      await authCache.setUserVerifiedInCache(email);
 
       return;
     }
 
     if (!user.isVerified) {
-      await authRepository.createVerificationToken(
+      await authCache.createVerificationToken(
         email,
         tokenHash,
         user.id,
         EXPIRATION_SECONDS,
       );
 
-      await authRepository.lockResendOtp(email);
+      await authCache.lockResendOtp(email);
 
       await sendEmail(email, otp);
 
@@ -183,7 +187,7 @@ export const authService = {
       throw new AppError(
         403,
         "USER_NOT_VERIFIED",
-        "La cuenta aún no ha sido verificada",
+        "La cuenta aún no ha sido verificada. Verifíquela",
       );
 
     const user = {
@@ -211,6 +215,9 @@ export const authService = {
 
     return { user, accessToken, refreshToken };
   },
+
+  forgotPassword: async (email: string) => {},
+
   refresh: async ({ token, ip, userAgent }: RefreshDTO) => {
     if (!token)
       throw new AppError(401, "MISSING_TOKEN", "No se envio refreshToken");

@@ -9,7 +9,7 @@ export const sendEmail = async (email: string, otpCode: string) => {
   const resend = getResend();
 
   const { data, error } = await resend.emails.send({
-    from: "no-reply@afap.com",
+    from: "onboarding@resend.dev",
     to: email,
     subject: "Tu código de verificación",
     text: `Tu código de verificacióin de 6 dígitos es: ${otpCode}`,
@@ -31,7 +31,7 @@ export const sendEmail = async (email: string, otpCode: string) => {
     throw new AppError(
       502,
       "EMAIL_SEND_ERROR",
-      "No se pudo enviar el email, reenviar el código",
+      "No se pudo enviar el email, intenta de nuevo más tarde",
     );
   }
 

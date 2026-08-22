@@ -9,6 +9,8 @@ export const authController = {
     return res.status(200).json({
       ok: true,
       user,
+      message:
+        "Usuario registrado con éxito. Se ha enviado un código de verificación a tu correo electrónico",
     });
   },
 
@@ -29,12 +31,10 @@ export const authController = {
 
     await authService.resendOtp(email);
 
-    return res
-      .status(200)
-      .json({
-        ok: true,
-        message: "Si el correo está registrado, se ha enviado un nuevo código",
-      });
+    return res.status(200).json({
+      ok: true,
+      message: "Si el correo está registrado, se ha enviado un nuevo código",
+    });
   },
 
   login: async (req, res) => {
@@ -67,6 +67,13 @@ export const authController = {
         refreshToken,
       });
   },
+
+  forgotPassword: async (req, res) => {
+    const email = req.body.email;
+
+    await authService.forgotPassword(email);
+  },
+
   me: async (req, res) => {
     const user = req.user;
 

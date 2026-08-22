@@ -80,3 +80,13 @@ export const resendVerifyTokenSchema = z.object({
       .toLowerCase(),
   }),
 });
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z
+      .email({ error: "Formato de correo electrónico inválido" })
+      .max(80, "El email es demasiado largo")
+      .trim()
+      .toLowerCase(),
+  }),
+});

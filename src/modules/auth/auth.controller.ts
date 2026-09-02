@@ -72,6 +72,12 @@ export const authController = {
     const email = req.body.email;
 
     await authService.forgotPassword(email);
+
+    return res.status(200).json({
+      ok: true,
+      message:
+        "Si el correo está registrado, se ha enviado el link de recuperación a su email",
+    });
   },
 
   me: async (req, res) => {

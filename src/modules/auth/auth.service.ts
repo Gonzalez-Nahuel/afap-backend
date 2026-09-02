@@ -4,6 +4,7 @@ import type {
   LoginUserDTO,
   RefreshDTO,
   RegisterUserDTO,
+  SaveTokenDTO,
   VerificationDataDto,
 } from "./auth.dto";
 import { authRepository } from "./auth.repository";
@@ -16,9 +17,8 @@ import {
 } from "@/lib/jwt";
 import { hashToken } from "@/lib/hash-token";
 import { generateOTP } from "@/lib/generate-otp-code";
-import { sendEmail } from "@/lib/send-email";
+import { sendResetPasswordLink, sendVerificationOtp } from "@/lib/send-email";
 import { resendVerifyTokenSchema } from "./auth.schema";
-import { email } from "zod";
 import { authCache } from "./auth.cache";
 
 const DUMMY_HASH =
@@ -44,18 +44,22 @@ export const authService = {
 
     const user = await authRepository.createUser(userPayload);
 
-    await authCache.deleteUserVerifiedInCache(data.email);
+    const verificationPayload = {
+      email: data.email,
+      token: tokenHash,
+      userId: user.id,
+      attempts: 0,
+      retries: 0,
+      ttl: EXPIRATION_SECONDS,
+    };
 
-    await authCache.createVerificationToken(
-      data.email,
-      tokenHash,
-      user.id,
-      EXPIRATION_SECONDS,
-    );
+    await authCache.deleteVerificationShieldCache(data.email);
 
-    await authCache.lockResendOtp(data.email);
+    await authCache.createVerificationOtp(verificationPayload);
 
-    await sendEmail(data.email, otp);
+    await authCache.lockResendVerificationOtp(data.email);
+
+    await sendVerificationOtp(data.email, otp);
 
     return user;
   },
@@ -63,7 +67,7 @@ export const authService = {
   verifyEmail: async (token: string, email: string) => {
     const tokenHash = hashToken(token);
 
-    const verificationData = await authCache.getVerificationUserData(email);
+    const verificationData = await authCache.getVerificationOtpCache(email);
 
     if (!verificationData)
       throw new AppError(
@@ -83,7 +87,7 @@ export const authService = {
       );
 
     if (parsedVerificationData.token !== tokenHash) {
-      await authCache.incrementVerificationAttemps(
+      await authCache.incrementVerificationAttempts(
         email,
         parsedVerificationData,
       );
@@ -95,7 +99,7 @@ export const authService = {
       );
     }
 
-    await authCache.deleteVerificationToken(email);
+    await authCache.deleteVerificationOtpCache(email);
 
     await authRepository.verifyUserAccount(
       parsedVerificationData.userId,
@@ -106,7 +110,7 @@ export const authService = {
   },
 
   resendOtp: async (email: string) => {
-    const canResendOtp = await authCache.canResendOtp(email);
+    const canResendOtp = await authCache.canResendVerficationOtp(email);
 
     if (!canResendOtp)
       throw new AppError(
@@ -115,31 +119,48 @@ export const authService = {
         "Por favor, espera 60 segundos antes de solicitar un nuevo código.",
       );
 
-    const isAlreadyVerifiedInCache =
-      await authCache.isAlreadyVerifiedInCache(email);
+    const isUserVerified = await authCache.isVerificationShieldActive(email);
 
-    if (isAlreadyVerifiedInCache) return;
+    if (isUserVerified) return;
+
+    const isLocked = await authCache.canRetryVerificationOtp(email);
+
+    if (isLocked) return;
 
     const otp = generateOTP();
     const tokenHash = hashToken(otp);
     const EXPIRATION_SECONDS = 15 * 60;
 
     const hasVerificationDataInCache =
-      await authCache.getVerificationUserData(email);
+      await authCache.getVerificationOtpCache(email);
 
     if (hasVerificationDataInCache) {
-      const parsedVerificationData = JSON.parse(hasVerificationDataInCache);
-
-      await authCache.createVerificationToken(
-        email,
-        tokenHash,
-        parsedVerificationData.userId,
-        EXPIRATION_SECONDS,
+      const parsedVerificationData: SaveTokenDTO = JSON.parse(
+        hasVerificationDataInCache,
       );
 
-      await authCache.lockResendOtp(email);
+      if (parsedVerificationData.retries >= 5) {
+        await authCache.deleteVerificationOtpCache(email);
 
-      await sendEmail(email, otp);
+        await authCache.lockVerificationOtpRetries(email);
+
+        return;
+      }
+
+      const verificationPayload = {
+        email: email,
+        token: tokenHash,
+        userId: parsedVerificationData.userId,
+        attempts: 0,
+        retries: parsedVerificationData.retries + 1,
+        ttl: EXPIRATION_SECONDS,
+      };
+
+      await authCache.createVerificationOtp(verificationPayload);
+
+      await authCache.lockResendVerificationOtp(email);
+
+      await sendVerificationOtp(email, otp);
 
       return;
     }
@@ -147,25 +168,25 @@ export const authService = {
     const user = await authRepository.findUserByEmail(email);
 
     if (!user || user.isVerified) {
-      await authCache.setUserVerifiedInCache(email);
+      await authCache.setVerificationShieldCache(email);
 
       return;
     }
 
-    if (!user.isVerified) {
-      await authCache.createVerificationToken(
-        email,
-        tokenHash,
-        user.id,
-        EXPIRATION_SECONDS,
-      );
+    const verificationPayload = {
+      email,
+      token: tokenHash,
+      userId: user.id,
+      attempts: 0,
+      retries: 0,
+      ttl: EXPIRATION_SECONDS,
+    };
 
-      await authCache.lockResendOtp(email);
+    await authCache.createVerificationOtp(verificationPayload);
 
-      await sendEmail(email, otp);
+    await authCache.lockResendVerificationOtp(email);
 
-      return;
-    }
+    await sendVerificationOtp(email, otp);
 
     return;
   },
@@ -216,7 +237,81 @@ export const authService = {
     return { user, accessToken, refreshToken };
   },
 
-  forgotPassword: async (email: string) => {},
+  forgotPassword: async (email: string) => {
+    const canSendLink = await authCache.canSendResetPasswordLink(email);
+
+    if (!canSendLink)
+      throw new AppError(
+        429,
+        "TOO_MANY_REQUEST",
+        "Ya solicitaste un cambio de contraseña. Revisa tu correo o espera 60 segundos para solicitar uno nuevo.",
+      );
+
+    const canRetry = await authCache.canRetryResetPasswordLink(email);
+
+    if (!canRetry) return;
+
+    const token = crypto.randomUUID();
+    const tokenHash = hashToken(token);
+    const EXPIRATION_SECONDS = 15 * 60;
+
+    const hasResetPasswordLinkDataInCache =
+      await authCache.getResetPasswordLinkCache(email);
+
+    if (hasResetPasswordLinkDataInCache) {
+      const parsedResetData = JSON.parse(hasResetPasswordLinkDataInCache);
+
+      if (parsedResetData.retries >= 5) {
+        await authCache.lockResetPasswordLinkRetries(email);
+
+        await authCache.deleteResetPasswordLinkCache(email);
+
+        return;
+      }
+
+      const resetPasswordPayload = {
+        email,
+        token: tokenHash,
+        userId: parsedResetData.userId,
+        attempts: 0,
+        retries: parsedResetData.retries + 1,
+        ttl: EXPIRATION_SECONDS,
+      };
+
+      await authCache.createResetPasswordLink(resetPasswordPayload);
+
+      await authCache.lockSendResetPasswordLink(email);
+
+      await sendResetPasswordLink(email, token);
+
+      return;
+    }
+
+    const userExists = await authRepository.findUserByEmail(email);
+
+    if (!userExists || !userExists.isVerified) {
+      await authCache.lockResetPasswordLinkRetries(email);
+
+      return;
+    }
+
+    const resetPasswordPayload = {
+      email,
+      token: tokenHash,
+      userId: userExists.id,
+      attempts: 0,
+      retries: 0,
+      ttl: EXPIRATION_SECONDS,
+    };
+
+    await authCache.createResetPasswordLink(resetPasswordPayload);
+
+    await authCache.lockSendResetPasswordLink(email);
+
+    await sendResetPasswordLink(email, token);
+
+    return;
+  },
 
   refresh: async ({ token, ip, userAgent }: RefreshDTO) => {
     if (!token)

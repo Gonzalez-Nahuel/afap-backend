@@ -1,53 +1,65 @@
 import { redis } from "@/lib/redis";
-import type { VerificationDataDto } from "./auth.dto";
+import type { SaveTokenDTO, VerificationDataDto } from "./auth.dto";
 import { email } from "zod";
 
 export const authCache = {
-  createVerificationToken: async (
-    email: string,
-    token: string,
-    userId: string,
-    ttl: number,
-  ) => {
-    await redis.set(
-      `auth:verification:${email}`,
-      JSON.stringify({ token, userId, attemps: 0 }),
+  createVerificationOtp: async (data: SaveTokenDTO) => {
+    return await redis.set(
+      `auth:verification:${data.email}`,
+      JSON.stringify({
+        token: data.token,
+        userId: data.userId,
+        attempts: data.attempts,
+        retries: data.retries,
+      }),
       "EX",
-      ttl,
+      data.ttl,
     );
   },
 
-  lockResendOtp: async (email: string) => {
+  lockResendVerificationOtp: async (email: string) => {
     return await redis.set(`lock:resend:${email}`, "1", "EX", 60);
   },
 
-  canResendOtp: async (email: string) => {
+  canResendVerficationOtp: async (email: string) => {
     const exists = await redis.exists(`lock:resend:${email}`);
 
     return exists === 0;
   },
 
-  setUserVerifiedInCache: async (email: string) => {
-    const ttl = 60 * 15;
+  lockVerificationOtpRetries: async (email: string) => {
+    const ttl = 20 * 60;
 
-    await redis.set(`user:status:verified:${email}`, "1", "EX", ttl);
+    return await redis.set(`lock:verification:retries:${email}`, 1, "EX", ttl);
   },
 
-  isAlreadyVerifiedInCache: async (email: string) => {
-    const exists = await redis.exists(`user:status:verified:${email}`);
+  canRetryVerificationOtp: async (email: string) => {
+    const exists = await redis.exists(`lock:verification:retries:${email}`);
+
+    return exists === 0;
+  },
+
+  setVerificationShieldCache: async (email: string) => {
+    const ttl = 60 * 15;
+
+    await redis.set(`auth:verification:shield:${email}`, "1", "EX", ttl);
+  },
+
+  isVerificationShieldActive: async (email: string) => {
+    const exists = await redis.exists(`auth:verification:shield:${email}`);
 
     return exists === 1;
   },
 
-  deleteUserVerifiedInCache: async (email: string) => {
-    await redis.del(`user:status:verified:${email}`);
+  deleteVerificationShieldCache: async (email: string) => {
+    await redis.del(`auth:verification:shield:${email}`);
   },
 
-  getVerificationUserData: async (email: string) => {
+  getVerificationOtpCache: async (email: string) => {
     return await redis.get(`auth:verification:${email}`);
   },
 
-  incrementVerificationAttemps: async (
+  incrementVerificationAttempts: async (
     email: string,
     data: VerificationDataDto,
   ) => {
@@ -68,7 +80,51 @@ export const authCache = {
     );
   },
 
-  deleteVerificationToken: async (email: string) => {
+  deleteVerificationOtpCache: async (email: string) => {
     return await redis.del(`auth:verification:${email}`);
+  },
+
+  createResetPasswordLink: async (data: SaveTokenDTO) => {
+    return await redis.set(
+      `password:reset:${data.email}`,
+      JSON.stringify({
+        token: data.token,
+        userId: data.userId,
+        attempts: data.attempts,
+        retries: data.retries,
+      }),
+      "EX",
+      data.ttl,
+    );
+  },
+
+  getResetPasswordLinkCache: async (email: string) => {
+    return await redis.get(`password:reset:${email}`);
+  },
+
+  deleteResetPasswordLinkCache: async (email: string) => {
+    return await redis.del(`password:reset:${email}`);
+  },
+
+  lockSendResetPasswordLink: async (email: string) => {
+    return await redis.set(`lock:password:resend:${email}`, 1, "EX", 60);
+  },
+
+  canSendResetPasswordLink: async (email: string) => {
+    const exists = await redis.exists(`lock:password:resend:${email}`);
+
+    return exists === 0;
+  },
+
+  lockResetPasswordLinkRetries: async (email: string) => {
+    const ttl = 20 * 60;
+
+    return await redis.set(`lock:password:retries:${email}`, 1, "EX", ttl);
+  },
+
+  canRetryResetPasswordLink: async (email: string) => {
+    const exists = await redis.exists(`lock:password:retries:${email}`);
+
+    return exists === 0;
   },
 };

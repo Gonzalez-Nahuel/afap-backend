@@ -28,7 +28,19 @@ app.use(cookieParser());
 
 app.use(pinoHttp({ logger }));
 
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get("/openapi.json", (_req, res) => res.json(swaggerSpec));
+
+app.use(
+  "/docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    customSiteTitle: "AFAP API Docs",
+    swaggerOptions: {
+      displayRequestDuration: true,
+      persistAuthorization: true,
+    },
+  }),
+);
 
 app.use("/api", router);
 

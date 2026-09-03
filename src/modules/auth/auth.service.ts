@@ -1,4 +1,4 @@
-import { AppError } from "@/lib/app-error";
+import { AppError } from "@/lib/app-error.js";
 import type {
   CreateSessionDTO,
   LoginUserDTO,
@@ -6,20 +6,23 @@ import type {
   RegisterUserDTO,
   SaveTokenDTO,
   VerificationDataDto,
-} from "./auth.dto";
-import { authRepository } from "./auth.repository";
+} from "./auth.dto.js";
+import { authRepository } from "./auth.repository.js";
 import bcrypt from "bcrypt";
 import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
   type UserPayload,
-} from "@/lib/jwt";
-import { hashToken } from "@/lib/hash-token";
-import { generateOTP } from "@/lib/generate-otp-code";
-import { sendResetPasswordLink, sendVerificationOtp } from "@/lib/send-email";
-import { resendVerifyTokenSchema } from "./auth.schema";
-import { authCache } from "./auth.cache";
+} from "@/lib/jwt.js";
+import { hashToken } from "@/lib/hash-token.js";
+import { generateOTP } from "@/lib/generate-otp-code.js";
+import {
+  sendResetPasswordLink,
+  sendVerificationOtp,
+} from "@/lib/send-email.js";
+import { resendVerifyTokenSchema } from "./auth.schema.js";
+import { authCache } from "./auth.cache.js";
 
 const DUMMY_HASH =
   "$2b$10$CwTycUXWue0Thq9StjUM0uJ8s6VjWaVn2yXhH3pk.XUL8/l6nR1Aq";
@@ -42,6 +45,8 @@ export const authService = {
       passwordHash,
     };
 
+    await sendVerificationOtp(data.email, otp);
+
     const user = await authRepository.createUser(userPayload);
 
     const verificationPayload = {
@@ -58,8 +63,6 @@ export const authService = {
     await authCache.createVerificationOtp(verificationPayload);
 
     await authCache.lockResendVerificationOtp(data.email);
-
-    await sendVerificationOtp(data.email, otp);
 
     return user;
   },
@@ -79,10 +82,10 @@ export const authService = {
     const parsedVerificationData: VerificationDataDto =
       JSON.parse(verificationData);
 
-    if (parsedVerificationData.attemps >= 5)
+    if (parsedVerificationData.attempts >= 5)
       throw new AppError(
         429,
-        "TOO_MANY_ATTEMPS",
+        "TOO_MANY_ATTEMPTS",
         "Has superado el límite de intentos permitidos. Solicita un nuevo código",
       );
 
@@ -123,9 +126,9 @@ export const authService = {
 
     if (isUserVerified) return;
 
-    const isLocked = await authCache.canRetryVerificationOtp(email);
+    const canRetry = await authCache.canRetryVerificationOtp(email);
 
-    if (isLocked) return;
+    if (!canRetry) return;
 
     const otp = generateOTP();
     const tokenHash = hashToken(otp);
@@ -311,6 +314,15 @@ export const authService = {
     await sendResetPasswordLink(email, token);
 
     return;
+  },
+
+  me: async (user: UserPayload) => {
+    const userPayload = {
+      id: user.id,
+      username: user.username,
+    };
+
+    return userPayload;
   },
 
   refresh: async ({ token, ip, userAgent }: RefreshDTO) => {

@@ -1,10 +1,10 @@
 import type z from "zod";
-import type { loginUserSchema, registerUserSchema } from "./auth.schema";
+import type { loginUserSchema, registerUserSchema } from "./auth.schema.js";
 
 export interface VerificationDataDto {
   token: string;
   userId: string;
-  attemps: number;
+  attempts: number;
 }
 
 export type RegisterUserDTO = z.infer<typeof registerUserSchema>["body"];

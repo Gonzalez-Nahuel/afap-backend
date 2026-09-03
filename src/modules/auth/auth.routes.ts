@@ -1,16 +1,17 @@
-import { asyncHandler } from "@/middlewares/async-handler";
+import { asyncHandler } from "@/middlewares/async-handler.js";
 import { Router } from "express";
-import { authController } from "./auth.controller";
-import { validate } from "@/middlewares/validate.middleware";
+import { authController } from "./auth.controller.js";
+import { validate } from "@/middlewares/validate.middleware.js";
 import {
+  forgotPasswordSchema,
   loginUserSchema,
   logoutSchema,
   refreshTokenSchema,
   registerUserSchema,
   resendVerifyTokenSchema,
   verifyEmailSchema,
-} from "./auth.schema";
-import { authMiddleware } from "@/middlewares/auth.middleware";
+} from "./auth.schema.js";
+import { authMiddleware } from "@/middlewares/auth.middleware.js";
 
 export const authRouter = Router();
 
@@ -602,6 +603,12 @@ authRouter.post(
   "/login",
   validate(loginUserSchema),
   asyncHandler(authController.login),
+);
+
+authRouter.post(
+  "/forgot-password",
+  validate(forgotPasswordSchema),
+  authController.forgotPassword,
 );
 
 /**

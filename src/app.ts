@@ -4,10 +4,10 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { pinoHttp } from "pino-http";
 import swaggerUi from "swagger-ui-express";
-import { swaggerSpec } from "./config/swagger";
-import { router } from "./routes";
-import { errorMiddleware } from "./middlewares/error.middleware";
-import { logger } from "./lib/logger";
+import { swaggerSpec } from "./config/swagger.js";
+import { router } from "./routes/index.js";
+import { errorMiddleware } from "./middlewares/error.middleware.js";
+import { logger } from "./lib/logger.js";
 
 export const app = express();
 

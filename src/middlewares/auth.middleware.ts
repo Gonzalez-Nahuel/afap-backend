@@ -1,5 +1,5 @@
-import { AppError } from "@/lib/app-error";
-import { verifyAccessToken, type UserPayload } from "@/lib/jwt";
+import { AppError } from "@/lib/app-error.js";
+import { verifyAccessToken, type UserPayload } from "@/lib/jwt.js";
 import type { RequestHandler } from "express";
 
 export const authMiddleware: RequestHandler = (req, res, next) => {

@@ -1,5 +1,5 @@
-import { redis } from "@/lib/redis";
-import type { SaveTokenDTO, VerificationDataDto } from "./auth.dto";
+import { redis } from "@/lib/redis.js";
+import type { SaveTokenDTO, VerificationDataDto } from "./auth.dto.js";
 import { email } from "zod";
 
 export const authCache = {
@@ -69,7 +69,7 @@ export const authCache = {
 
     const verificationData = {
       ...data,
-      attemps: data.attemps + 1,
+      attempts: data.attempts + 1,
     };
 
     return await redis.set(

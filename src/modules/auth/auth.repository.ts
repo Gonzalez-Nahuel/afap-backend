@@ -1,9 +1,9 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma.js";
 import type {
   CreateSessionDTO,
   RegisterUserDTO,
   VerificationDataDto,
-} from "./auth.dto";
+} from "./auth.dto.js";
 
 export const authRepository = {
   createUser: async (

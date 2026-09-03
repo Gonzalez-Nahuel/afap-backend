@@ -1,6 +1,6 @@
-import Redis from "ioredis";
-import { logger } from "./logger";
-import { env } from "@/config/env";
+import { Redis } from "ioredis";
+import { logger } from "./logger.js";
+import { env } from "@/config/env.js";
 
 const REDIS_URL = env.REDIS_URL || "redis://127.0.0.1:6379";
 

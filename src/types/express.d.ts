@@ -1,4 +1,4 @@
-import { UserPayload } from "@/lib/jwt";
+import { UserPayload } from "@/lib/jwt.js";
 import type { ClientInfoDTO } from "@/modules/auth/auth.dto";
 
 export type ClientType = "web" | "mobile";

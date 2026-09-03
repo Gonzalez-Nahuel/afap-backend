@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
-import { authService } from "./auth.service";
-import { verifyEmailSchema } from "./auth.schema";
+import { authService } from "./auth.service.js";
+import { verifyEmailSchema } from "./auth.schema.js";
 
 export const authController = {
   register: async (req, res) => {
@@ -83,8 +83,11 @@ export const authController = {
   me: async (req, res) => {
     const user = req.user;
 
-    return res.status(200).json({ ok: true, user });
+    const userPayload = authService.me(user!);
+
+    return res.status(200).json({ ok: true, user: userPayload });
   },
+
   refresh: async (req, res) => {
     const clientType = req.clientType;
 

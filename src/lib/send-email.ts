@@ -1,7 +1,7 @@
-import { env } from "@/config/env";
+import { env } from "@/config/env.js";
 import { Resend } from "resend";
-import { logger } from "./logger";
-import { AppError } from "./app-error";
+import { logger } from "./logger.js";
+import { AppError } from "./app-error.js";
 
 const getResend = () => new Resend(env.RESEND_API_KEY);
 

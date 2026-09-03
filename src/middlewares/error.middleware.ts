@@ -1,10 +1,10 @@
 import type { NextFunction, Request, Response } from "express";
-import { AppError } from "@/lib/app-error";
+import { AppError } from "@/lib/app-error.js";
 import { ZodError } from "zod";
 import jwt from "jsonwebtoken";
-import { Prisma } from "../../generated/prisma/client";
-import { env } from "@/config/env";
-import { logger } from "@/lib/logger";
+import { Prisma } from "../../generated/prisma/client.js";
+import { env } from "@/config/env.js";
+import { logger } from "@/lib/logger.js";
 const { JsonWebTokenError, TokenExpiredError } = jwt;
 
 export const errorMiddleware = (

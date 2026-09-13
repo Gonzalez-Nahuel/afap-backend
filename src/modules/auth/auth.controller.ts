@@ -1,6 +1,5 @@
 import type { RequestHandler } from "express";
 import { authService } from "./auth.service.js";
-import { verifyEmailSchema } from "./auth.schema.js";
 
 export const authController = {
   register: async (req, res) => {
@@ -76,7 +75,7 @@ export const authController = {
     return res.status(200).json({
       ok: true,
       message:
-        "Si el correo está registrado, se ha enviado el link de recuperación a su email",
+        "Si el correo está registrado, se ha enviado el enlace de recuperación a su email",
     });
   },
 

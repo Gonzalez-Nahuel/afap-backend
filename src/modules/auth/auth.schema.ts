@@ -1,4 +1,4 @@
-import { email, z } from "zod";
+import { z } from "zod";
 
 export const registerUserSchema = z.object({
   body: z.object({
@@ -67,7 +67,8 @@ export const verifyEmailSchema = z.object({
     token: z
       .string()
       .min(6, "El código debe tener 6 dígitos")
-      .max(6, "El código debe tener 6 dígitos"),
+      .max(6, "El código debe tener 6 dígitos")
+      .regex(/^\d{6}$/, "El código debe contener únicamente números"),
   }),
 });
 

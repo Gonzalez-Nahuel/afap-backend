@@ -12,7 +12,7 @@ export const sendVerificationOtp = async (email: string, otpCode: string) => {
     from: "onboarding@resend.dev",
     to: email,
     subject: "Tu código de verificación",
-    text: `Tu código de verificacióin de 6 dígitos es: ${otpCode}`,
+    text: `Tu código de verificación de 6 dígitos es: ${otpCode}`,
     html: `
         <div style="font-family: sans-serif; padding: 20px;">
         <h2>Verifica tu cuenta</h2>

@@ -76,7 +76,7 @@ export const authService = {
       throw new AppError(
         404,
         "VERIFICATION_TOKEN_NOT_FOUND_OR_EXPIRED",
-        "EL token de verificación no existe o ha expirado. Solicita uno nuevo",
+        "El código de verificación no existe o ha expirado. Solicita uno nuevo",
       );
 
     const parsedVerificationData: VerificationDataDto =
@@ -98,7 +98,7 @@ export const authService = {
       throw new AppError(
         401,
         "VERIFICATION_TOKEN_INVALID",
-        "EL token de verificación es inválido",
+        "El código de verificación es inválido",
       );
     }
 
@@ -327,7 +327,7 @@ export const authService = {
 
   refresh: async ({ token, ip, userAgent }: RefreshDTO) => {
     if (!token)
-      throw new AppError(401, "MISSING_TOKEN", "No se envio refreshToken");
+      throw new AppError(401, "MISSING_TOKEN", "No se envió el refresh token");
 
     const verifiedToken = verifyRefreshToken(token) as UserPayload;
 
@@ -339,7 +339,7 @@ export const authService = {
       if (session?.isRevoked) {
         await authRepository.revokeAllUserSessions(session.userId);
       }
-      throw new AppError(401, "INVALID_SESSION", "sesión inválida o cerrada");
+      throw new AppError(401, "INVALID_SESSION", "Sesión inválida o cerrada");
     }
 
     const now = Date.now();

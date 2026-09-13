@@ -1,7 +1,8 @@
 import { asyncHandler } from "@/middlewares/async-handler.js";
+import { authMiddleware } from "@/middlewares/auth.middleware.js";
+import { validate } from "@/middlewares/validate.middleware.js";
 import { Router } from "express";
 import { authController } from "./auth.controller.js";
-import { validate } from "@/middlewares/validate.middleware.js";
 import {
   forgotPasswordSchema,
   loginUserSchema,
@@ -11,7 +12,6 @@ import {
   resendVerifyTokenSchema,
   verifyEmailSchema,
 } from "./auth.schema.js";
-import { authMiddleware } from "@/middlewares/auth.middleware.js";
 
 export const authRouter = Router();
 
@@ -19,161 +19,36 @@ export const authRouter = Router();
  * @openapi
  * /api/auth/register:
  *   post:
- *     tags:
- *       - Auth
- *     summary: Registrar un nuevo usuario
+ *     tags: [Auth]
+ *     summary: Registrar un usuario
+ *     description: |
+ *       Crea una cuenta no verificada y envía un código OTP al email indicado.
+ *       El código vence a los 15 minutos y debe confirmarse con `verify-email`.
+ *     operationId: registerUser
  *     security: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - username
- *               - email
- *               - password
- *             properties:
- *               username:
- *                 type: string
- *                 minLength: 6
- *                 maxLength: 50
- *                 pattern: "^[a-zA-Z0-9_]+$"
- *                 example: "pepe_12"
- *               email:
- *                 type: string
- *                 format: email
- *                 maxLength: 80
- *                 example: "pepe@example.com"
- *               password:
- *                 type: string
- *                 minLength: 8
- *                 maxLength: 100
- *                 example: "SecureP@ss123"
+ *             $ref: "#/components/schemas/RegisterRequest"
  *     responses:
  *       "200":
- *         description: Registro exitoso.
+ *         description: Usuario creado y código de verificación enviado.
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - user
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: true
- *                 user:
- *                   type: object
- *                   required:
- *                     - id
- *                     - username
- *                     - email
- *                     - createdAt
- *                   properties:
- *                     id:
- *                       type: string
- *                     username:
- *                       type: string
- *                     email:
- *                       type: string
- *                     createdAt:
- *                       type: string
- *                       format: date-time
+ *               $ref: "#/components/schemas/RegisterResponse"
  *       "400":
- *         description: Error de validación de Zod.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *                 - errors
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: VALIDATION_ERROR
- *                 message:
- *                   type: string
- *                   example: Error de validación
- *                 errors:
- *                   type: array
- *                   items:
- *                     type: object
- *                     required:
- *                       - field
- *                       - message
- *                     properties:
- *                       field:
- *                         type: string
- *                       message:
- *                         type: string
+ *         $ref: "#/components/responses/ValidationError"
  *       "409":
- *         description: El email ya está registrado.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: USER_EXISTS
- *                 message:
- *                   type: string
- *                   example: El email ya está registrado
- *       "502":
- *         description: Solo si falla `sendEmail()` al intentar enviar el código de verificación.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: EMAIL_SEND_ERROR
- *                 message:
- *                   type: string
- *                   example: No se pudo enviar el email, reenviar el código
+ *         $ref: "#/components/responses/Conflict"
  *       "500":
- *         description: Error inesperado del servidor.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: UNKNOWN_ERROR
- *                 message:
- *                   type: string
- *                   example: Internal server error
+ *         $ref: "#/components/responses/InternalServerError"
+ *       "502":
+ *         $ref: "#/components/responses/EmailDeliveryError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
  */
 authRouter.post(
   "/register",
@@ -185,135 +60,41 @@ authRouter.post(
  * @openapi
  * /api/auth/verify-email:
  *   post:
- *     tags:
- *       - Auth
- *     summary: Verificar el email del usuario
+ *     tags: [Auth]
+ *     summary: Verificar el email
+ *     description: |
+ *       Valida el OTP de seis dígitos enviado durante el registro y activa la cuenta.
+ *       Después de cinco intentos fallidos se bloquea el código actual.
+ *     operationId: verifyEmail
  *     security: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - email
- *               - token
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 maxLength: 80
- *               token:
- *                 type: string
- *                 minLength: 6
- *                 maxLength: 6
+ *             $ref: "#/components/schemas/VerifyEmailRequest"
  *     responses:
  *       "200":
- *         description: Verificación exitosa.
+ *         description: Cuenta verificada.
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Usuario verificado con éxito
+ *               $ref: "#/components/schemas/MessageResponse"
+ *             example:
+ *               ok: true
+ *               message: Usuario verificado con éxito
  *       "400":
- *         description: Error de validación del body.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *                 - errors
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: VALIDATION_ERROR
- *                 message:
- *                   type: string
- *                   example: Error de validación
- *                 errors:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       field:
- *                         type: string
- *                       message:
- *                         type: string
+ *         $ref: "#/components/responses/ValidationError"
  *       "401":
- *         description: El código de verificación es inválido.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: VERIFICATION_TOKEN_INVALID
- *                 message:
- *                   type: string
- *                   example: EL token de verificación es inválido
+ *         $ref: "#/components/responses/InvalidVerificationToken"
  *       "404":
- *         description: El token de verificación no existe o expiró.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: VERIFICATION_TOKEN_NOT_FOUND_OR_EXPIRED
- *                 message:
- *                   type: string
- *                   example: EL token de verificación no existe o ha expirado. Solicita uno nuevo
+ *         $ref: "#/components/responses/NotFound"
  *       "429":
- *         description: Se excedió el límite de intentos.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: TOO_MANY_ATTEMPS
- *                 message:
- *                   type: string
- *                   example: Has superado el límite de intentos permitidos. Solicita un nuevo código
+ *         $ref: "#/components/responses/TooManyRequests"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
  */
 authRouter.post(
   "/verify-email",
@@ -325,110 +106,40 @@ authRouter.post(
  * @openapi
  * /api/auth/resend-otp:
  *   post:
- *     tags:
- *       - Auth
- *     summary: Reenviar código de verificación
+ *     tags: [Auth]
+ *     summary: Reenviar el código de verificación
+ *     description: |
+ *       Genera un OTP nuevo para una cuenta pendiente de verificación.
+ *       La respuesta no revela si el email existe o si la cuenta ya está verificada.
+ *       Se permite una solicitud por minuto y hasta cinco reenvíos.
+ *     operationId: resendVerificationOtp
  *     security: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - email
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 maxLength: 80
+ *             $ref: "#/components/schemas/EmailRequest"
  *     responses:
  *       "200":
- *         description: Reenvío exitoso o respuesta silenciosa cuando el correo no existe o ya está verificado.
+ *         description: Solicitud procesada sin revelar el estado de la cuenta.
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Si el correo está registrado, se ha enviado un nuevo código
+ *               $ref: "#/components/schemas/MessageResponse"
+ *             example:
+ *               ok: true
+ *               message: Si el correo está registrado, se ha enviado un nuevo código
  *       "400":
- *         description: Error de validación del body.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *                 - errors
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: VALIDATION_ERROR
- *                 message:
- *                   type: string
- *                   example: Error de validación
- *                 errors:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       field:
- *                         type: string
- *                       message:
- *                         type: string
+ *         $ref: "#/components/responses/ValidationError"
  *       "429":
- *         description: El usuario solicitó un nuevo código demasiado pronto.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: TOO_MANY_REQUEST
- *                 message:
- *                   type: string
- *                   example: Por favor, espera 60 segundos antes de solicitar un nuevo código.
+ *         $ref: "#/components/responses/TooManyRequests"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
  *       "502":
- *         description: No se pudo enviar el email de verificación.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: EMAIL_SEND_ERROR
- *                 message:
- *                   type: string
- *                   example: No se pudo enviar el email, reenviar el código
+ *         $ref: "#/components/responses/EmailDeliveryError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
  */
 authRouter.post(
   "/resend-otp",
@@ -440,164 +151,45 @@ authRouter.post(
  * @openapi
  * /api/auth/login:
  *   post:
- *     tags:
- *       - Auth
+ *     tags: [Auth]
  *     summary: Iniciar sesión
+ *     description: |
+ *       Valida las credenciales y crea una sesión persistente de siete días.
+ *       Para `web`, el refresh token se entrega como cookie httpOnly y no aparece en el JSON.
+ *       Para `mobile`, se devuelven access token y refresh token en el cuerpo.
+ *     operationId: login
  *     security: []
  *     parameters:
- *       - in: header
- *         name: x-client-type
- *         required: true
- *         schema:
- *           type: string
- *           enum:
- *             - web
- *             - mobile
+ *       - $ref: "#/components/parameters/ClientTypeHeader"
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 maxLength: 80
- *               password:
- *                 type: string
- *                 minLength: 1
- *                 maxLength: 100
+ *             $ref: "#/components/schemas/LoginRequest"
  *     responses:
  *       "200":
- *         description: Inicio de sesión exitoso.
+ *         description: Sesión iniciada.
  *         headers:
  *           Set-Cookie:
+ *             description: Solo para web. Cookie httpOnly que contiene el refresh token.
  *             schema:
  *               type: string
- *             description: Solo en cliente web; se guarda la cookie refreshToken.
+ *               example: refreshToken=eyJ...; Max-Age=604800; Path=/; HttpOnly; SameSite=Strict
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - user
- *                     - accessToken
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: true
- *                     user:
- *                       type: object
- *                       required:
- *                         - id
- *                         - username
- *                       properties:
- *                         id:
- *                           type: string
- *                         username:
- *                           type: string
- *                     accessToken:
- *                       type: string
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - user
- *                     - accessToken
- *                     - refreshToken
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: true
- *                     user:
- *                       type: object
- *                       required:
- *                         - id
- *                         - username
- *                       properties:
- *                         id:
- *                           type: string
- *                         username:
- *                           type: string
- *                     accessToken:
- *                       type: string
- *                     refreshToken:
- *                       type: string
+ *               $ref: "#/components/schemas/LoginResponse"
  *       "400":
- *         description: Error de validación del header o del body.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *                 - errors
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: VALIDATION_ERROR
- *                 message:
- *                   type: string
- *                   example: Error de validación
- *                 errors:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       field:
- *                         type: string
- *                       message:
- *                         type: string
+ *         $ref: "#/components/responses/ValidationError"
  *       "401":
- *         description: Credenciales inválidas.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: INVALID_CREDENTIALS
- *                 message:
- *                   type: string
- *                   example: Credenciales inválidas
+ *         $ref: "#/components/responses/InvalidCredentials"
  *       "403":
- *         description: La cuenta no está verificada.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: USER_NOT_VERIFIED
- *                 message:
- *                   type: string
- *                   example: La cuenta aún no ha sido verificada
+ *         $ref: "#/components/responses/Forbidden"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
  */
 authRouter.post(
   "/login",
@@ -605,6 +197,45 @@ authRouter.post(
   asyncHandler(authController.login),
 );
 
+/**
+ * @openapi
+ * /api/auth/forgot-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Solicitar recuperación de contraseña
+ *     description: |
+ *       Envía un enlace de recuperación de un solo uso que vence a los 15 minutos.
+ *       La respuesta no revela si el email existe ni si su cuenta está verificada.
+ *       Se permite una solicitud por minuto y hasta cinco reenvíos.
+ *     operationId: requestPasswordReset
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: "#/components/schemas/EmailRequest"
+ *     responses:
+ *       "200":
+ *         description: Solicitud procesada sin revelar el estado de la cuenta.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/MessageResponse"
+ *             example:
+ *               ok: true
+ *               message: Si el correo está registrado, se ha enviado el enlace de recuperación a su email
+ *       "400":
+ *         $ref: "#/components/responses/ValidationError"
+ *       "429":
+ *         $ref: "#/components/responses/TooManyRequests"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
+ *       "502":
+ *         $ref: "#/components/responses/EmailDeliveryError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
+ */
 authRouter.post(
   "/forgot-password",
   validate(forgotPasswordSchema),
@@ -615,9 +246,10 @@ authRouter.post(
  * @openapi
  * /api/auth/me:
  *   get:
- *     tags:
- *       - Auth
- *     summary: Obtener información del usuario autenticado
+ *     tags: [Auth]
+ *     summary: Obtener el usuario autenticado
+ *     description: Devuelve la identidad pública contenida en el access token.
+ *     operationId: getAuthenticatedUser
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -626,90 +258,11 @@ authRouter.post(
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - user
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: true
- *                 user:
- *                   type: object
- *                   required:
- *                     - id
- *                     - username
- *                   properties:
- *                     id:
- *                       type: string
- *                     username:
- *                       type: string
+ *               $ref: "#/components/schemas/AuthenticatedUserResponse"
  *       "401":
- *         description: Token requerido o inválido.
- *         content:
- *           application/json:
- *             schema:
- *               oneOf:
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - code
- *                     - message
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: false
- *                     code:
- *                       type: string
- *                       example: MISSING_TOKEN
- *                     message:
- *                       type: string
- *                       example: Token requerido
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - code
- *                     - message
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: false
- *                     code:
- *                       type: string
- *                       example: INVALID_TOKEN
- *                     message:
- *                       type: string
- *                       example: Token inválido
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - code
- *                     - message
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: false
- *                     code:
- *                       type: string
- *                       example: TOKEN_EXPIRED_ERROR
- *                     message:
- *                       type: string
- *                       example: El token ha expirado
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - code
- *                     - message
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: false
- *                     code:
- *                       type: string
- *                       example: TOKEN_ERROR
- *                     message:
- *                       type: string
- *                       example: Token inválido o mal formado
+ *         $ref: "#/components/responses/Unauthorized"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
  */
 authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
 
@@ -717,144 +270,43 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  * @openapi
  * /api/auth/refresh:
  *   post:
- *     tags:
- *       - Auth
- *     summary: Renovar tokens
+ *     tags: [Auth]
+ *     summary: Renovar la sesión
+ *     description: |
+ *       Rota el refresh token: revoca la sesión anterior y crea una nueva.
+ *       Para `web`, lee y reemplaza la cookie httpOnly. Para `mobile`, lee el token del body
+ *       y devuelve el nuevo refresh token junto con el access token.
+ *     operationId: refreshSession
  *     security: []
  *     parameters:
- *       - in: header
- *         name: x-client-type
- *         required: true
- *         schema:
- *           type: string
- *           enum:
- *             - web
- *             - mobile
+ *       - $ref: "#/components/parameters/ClientTypeHeader"
  *     requestBody:
  *       required: false
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               refreshToken:
- *                 type: string
+ *             $ref: "#/components/schemas/RefreshTokenRequest"
  *     responses:
  *       "200":
- *         description: Refresh exitoso.
+ *         description: Tokens renovados y sesión rotada.
  *         headers:
  *           Set-Cookie:
+ *             description: Solo para web. Reemplaza la cookie del refresh token.
  *             schema:
  *               type: string
- *             description: Solo para cliente web; se reemplaza la cookie refreshToken.
+ *               example: refreshToken=eyJ...; Max-Age=604800; Path=/; HttpOnly; SameSite=Strict
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - accessToken
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: true
- *                     accessToken:
- *                       type: string
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - accessToken
- *                     - refreshToken
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: true
- *                     accessToken:
- *                       type: string
- *                     refreshToken:
- *                       type: string
+ *               $ref: "#/components/schemas/RefreshResponse"
  *       "400":
- *         description: Error de validación del header o del body.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *                 - errors
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: VALIDATION_ERROR
- *                 message:
- *                   type: string
- *                   example: Error de validación
- *                 errors:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       field:
- *                         type: string
- *                       message:
- *                         type: string
+ *         $ref: "#/components/responses/ValidationError"
  *       "401":
- *         description: Refresh token ausente o sesión inválida/expirada.
- *         content:
- *           application/json:
- *             schema:
- *               oneOf:
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - code
- *                     - message
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: false
- *                     code:
- *                       type: string
- *                       example: MISSING_TOKEN
- *                     message:
- *                       type: string
- *                       example: No se envio refreshToken
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - code
- *                     - message
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: false
- *                     code:
- *                       type: string
- *                       example: INVALID_SESSION
- *                     message:
- *                       type: string
- *                       example: sesión inválida o cerrada
- *                 - type: object
- *                   required:
- *                     - ok
- *                     - code
- *                     - message
- *                   properties:
- *                     ok:
- *                       type: boolean
- *                       example: false
- *                     code:
- *                       type: string
- *                       example: EXPIRED_SESSION
- *                     message:
- *                       type: string
- *                       example: La sesión ha expirado
+ *         $ref: "#/components/responses/InvalidRefreshToken"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
  */
 authRouter.post(
   "/refresh",
@@ -866,76 +318,41 @@ authRouter.post(
  * @openapi
  * /api/auth/logout:
  *   post:
- *     tags:
- *       - Auth
+ *     tags: [Auth]
  *     summary: Cerrar sesión
+ *     description: |
+ *       Revoca la sesión asociada al refresh token cuando está presente.
+ *       Para `web`, además elimina la cookie. La operación es idempotente: también devuelve
+ *       éxito cuando no se envía un refresh token.
+ *     operationId: logout
  *     security: []
  *     parameters:
- *       - in: header
- *         name: x-client-type
- *         required: true
- *         schema:
- *           type: string
- *           enum:
- *             - web
- *             - mobile
+ *       - $ref: "#/components/parameters/ClientTypeHeader"
  *     requestBody:
  *       required: false
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               refreshToken:
- *                 type: string
+ *             $ref: "#/components/schemas/RefreshTokenRequest"
  *     responses:
  *       "200":
- *         description: Cierre de sesión exitoso.
+ *         description: Sesión cerrada o solicitud ya satisfecha.
  *         headers:
  *           Set-Cookie:
+ *             description: Solo para web. Elimina la cookie del refresh token.
  *             schema:
  *               type: string
- *             description: Solo para cliente web; elimina la cookie refreshToken.
+ *               example: refreshToken=; Path=/; HttpOnly; SameSite=Strict
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               required:
- *                 - ok
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: true
+ *               $ref: "#/components/schemas/LogoutResponse"
  *       "400":
- *         description: Error de validación del header o del body.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               required:
- *                 - ok
- *                 - code
- *                 - message
- *                 - errors
- *               properties:
- *                 ok:
- *                   type: boolean
- *                   example: false
- *                 code:
- *                   type: string
- *                   example: VALIDATION_ERROR
- *                 message:
- *                   type: string
- *                   example: Error de validación
- *                 errors:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       field:
- *                         type: string
- *                       message:
- *                         type: string
+ *         $ref: "#/components/responses/ValidationError"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
  */
 authRouter.post(
   "/logout",

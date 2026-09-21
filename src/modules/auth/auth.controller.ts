@@ -79,6 +79,29 @@ export const authController = {
     });
   },
 
+  resetPassword: async (req, res) => {
+    const payload = req.body;
+
+    await authService.resetPassword(payload);
+
+    return res.json({
+      ok: true,
+      message: "La contraseña fue actualizada con éxito",
+    });
+  },
+
+  changePassword: async (req, res) => {
+    const { id } = req.user!;
+    const { password } = req.body;
+
+    await authService.changePassword(id, password);
+
+    res.json({
+      ok: true,
+      message: "La contraseña fue actualizada con éxito",
+    });
+  },
+
   me: async (req, res) => {
     const user = req.user;
 

@@ -1,5 +1,9 @@
 import type z from "zod";
-import type { loginUserSchema, registerUserSchema } from "./auth.schema.js";
+import type {
+  loginUserSchema,
+  registerUserSchema,
+  resetPasswordSchema,
+} from "./auth.schema.js";
 
 export interface VerificationDataDto {
   token: string;
@@ -40,3 +44,5 @@ export interface SaveTokenDTO {
   retries: number;
   ttl: number;
 }
+
+export type ResetPasswordDTO = z.infer<typeof resetPasswordSchema>["body"];

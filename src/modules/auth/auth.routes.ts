@@ -4,12 +4,14 @@ import { validate } from "@/middlewares/validate.middleware.js";
 import { Router } from "express";
 import { authController } from "./auth.controller.js";
 import {
+  changePasswordSchema,
   forgotPasswordSchema,
   loginUserSchema,
   logoutSchema,
   refreshTokenSchema,
   registerUserSchema,
   resendVerifyTokenSchema,
+  resetPasswordSchema,
   verifyEmailSchema,
 } from "./auth.schema.js";
 
@@ -240,6 +242,19 @@ authRouter.post(
   "/forgot-password",
   validate(forgotPasswordSchema),
   authController.forgotPassword,
+);
+
+authRouter.post(
+  "/reset-password",
+  validate(resetPasswordSchema),
+  authController.resetPassword,
+);
+
+authRouter.post(
+  "/change-password",
+  authMiddleware,
+  validate(changePasswordSchema),
+  authController.changePassword,
 );
 
 /**

@@ -4,6 +4,7 @@ import type {
   LoginUserDTO,
   RefreshDTO,
   RegisterUserDTO,
+  ResetPasswordDTO,
   SaveTokenDTO,
   VerificationDataDto,
 } from "./auth.dto.js";
@@ -312,6 +313,52 @@ export const authService = {
     await authCache.lockSendResetPasswordLink(email);
 
     await sendResetPasswordLink(email, token);
+
+    return;
+  },
+
+  resetPassword: async (data: ResetPasswordDTO) => {
+    const { email, token, password } = data;
+
+    const tokenHash = hashToken(token);
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const hasResetPasswordLinkDataInCache =
+      await authCache.getResetPasswordLinkCache(email);
+
+    if (!hasResetPasswordLinkDataInCache)
+      throw new AppError(
+        400,
+        "INVALID_OR_EXPIRED_TOKEN",
+        "El enlace de recuperación es inválido o ha expirado. Por favor, solicita uno nuevo.",
+      );
+
+    const parsedResetLinkData = JSON.parse(hasResetPasswordLinkDataInCache);
+
+    const userId = parsedResetLinkData.userId;
+
+    if (tokenHash !== parsedResetLinkData.token)
+      throw new AppError(
+        400,
+        "INVALID_OR_EXPIRED_TOKEN",
+        "El enlace de recuperación es inválido o ha expirado. Por favor, solicita uno nuevo.",
+      );
+
+    await authRepository.resetUserPassword(userId, passwordHash);
+
+    await authRepository.revokeAllUserSessions(userId);
+
+    await authCache.deleteResetPasswordLinkCache(email);
+
+    return;
+  },
+
+  changePassword: async (id: string, password: string) => {
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await authRepository.changeUserPassword(id, passwordHash);
+
+    await authRepository.revokeAllUserSessions(id);
 
     return;
   },

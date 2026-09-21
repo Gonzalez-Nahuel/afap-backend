@@ -105,7 +105,7 @@ export const authController = {
   me: async (req, res) => {
     const user = req.user;
 
-    const userPayload = authService.me(user!);
+    const userPayload = await authService.me(user!);
 
     return res.status(200).json({ ok: true, user: userPayload });
   },
@@ -141,6 +141,7 @@ export const authController = {
       });
     }
   },
+
   logout: async (req, res) => {
     const clientType = req.clientType;
     const refreshToken =

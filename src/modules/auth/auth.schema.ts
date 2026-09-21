@@ -1,32 +1,38 @@
 import { z } from "zod";
 
 export const registerUserSchema = z.object({
-  body: z.object({
-    username: z
-      .string()
-      .min(6, { error: "El usuario debe tener al menos 6 caracteres" })
-      .regex(/^[a-zA-Z0-9_]+$/, {
-        message: "El usuario solo permite letras, números y guiones bajos",
-      })
-      .max(50, "El usuario es demasiado largo"),
+  body: z
+    .object({
+      username: z
+        .string()
+        .min(6, { error: "El usuario debe tener al menos 6 caracteres" })
+        .regex(/^[a-zA-Z0-9_]+$/, {
+          message: "El usuario solo permite letras, números y guiones bajos",
+        })
+        .max(50, "El usuario es demasiado largo"),
 
-    email: z
-      .email({ error: "Formato de correo electrónico inválido" })
-      .trim()
-      .toLowerCase()
-      .max(80, "El email es demasiado largo"),
+      email: z
+        .email({ error: "Formato de correo electrónico inválido" })
+        .trim()
+        .toLowerCase()
+        .max(80, "El email es demasiado largo"),
 
-    password: z
-      .string()
-      .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
-      .regex(/[A-Z]/, { message: "Debe contener al menos una letra mayúscula" })
-      .regex(/[a-z]/, { message: "Debe contener al menos una letra minúscula" })
-      .regex(/[0-9]/, { message: "Debe contener al menos un número" })
-      .regex(/[^a-zA-Z0-9]/, {
-        message: "Debe contener al menos un carácter especial",
-      })
-      .max(100, "La contraseña es demasiado larga"),
-  }),
+      password: z
+        .string()
+        .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
+        .regex(/[A-Z]/, {
+          message: "Debe contener al menos una letra mayúscula",
+        })
+        .regex(/[a-z]/, {
+          message: "Debe contener al menos una letra minúscula",
+        })
+        .regex(/[0-9]/, { message: "Debe contener al menos un número" })
+        .regex(/[^a-zA-Z0-9]/, {
+          message: "Debe contener al menos un carácter especial",
+        })
+        .max(100, "La contraseña es demasiado larga"),
+    })
+    .strict(),
 });
 
 const clientTypeHeaderSchema = z.object({
@@ -37,93 +43,139 @@ const clientTypeHeaderSchema = z.object({
 
 export const loginUserSchema = z.object({
   headers: clientTypeHeaderSchema,
-  body: z.object({
-    email: z
-      .email({ error: "Formato de correo electrónico inválido" })
-      .max(80, "El email es demasiado largo")
-      .trim()
-      .toLowerCase(),
-    password: z.string().min(8).max(100),
-  }),
+  body: z
+    .object({
+      email: z
+        .email({ error: "Formato de correo electrónico inválido" })
+        .max(80, "El email es demasiado largo")
+        .trim()
+        .toLowerCase(),
+      password: z.string().min(8).max(100),
+    })
+    .strict(),
 });
 
-export const refreshTokenSchema = z.object({
-  headers: clientTypeHeaderSchema,
-  body: z.object({ refreshToken: z.string().optional() }).optional(),
-});
+export const refreshTokenSchema = z
+  .object({
+    headers: clientTypeHeaderSchema,
+    body: z.object({ refreshToken: z.string().optional() }).strict().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const clientType = data.headers?.["x-client-type"];
+    const token = data.body?.refreshToken;
 
-export const logoutSchema = z.object({
-  headers: clientTypeHeaderSchema,
-  body: z.object({ refreshToken: z.string().optional() }).optional(),
-});
+    if (clientType === "mobile" && !token) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["body", "refreshToken"],
+        message: "El refreshToken es requerido para dispositivos móviles",
+      });
+    }
+  });
+
+export const logoutSchema = z
+  .object({
+    headers: clientTypeHeaderSchema,
+    body: z.object({ refreshToken: z.string().optional() }).strict().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const clientType = data.headers?.["x-client-type"];
+    const token = data.body?.refreshToken;
+
+    if (clientType === "mobile" && !token) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["body", "refreshToken"],
+        message: "El refreshToken es requerido para dispositivos móviles",
+      });
+    }
+  });
 
 export const verifyEmailSchema = z.object({
-  body: z.object({
-    email: z
-      .email({ error: "Formato de correo electrónico inválido" })
-      .max(80, "El email es demasiado largo")
-      .trim()
-      .toLowerCase(),
-    token: z
-      .string()
-      .min(6, "El código debe tener 6 dígitos")
-      .max(6, "El código debe tener 6 dígitos")
-      .regex(/^\d{6}$/, "El código debe contener únicamente números"),
-  }),
+  body: z
+    .object({
+      email: z
+        .email({ error: "Formato de correo electrónico inválido" })
+        .max(80, "El email es demasiado largo")
+        .trim()
+        .toLowerCase(),
+      token: z
+        .string()
+        .min(6, "El código debe tener 6 dígitos")
+        .max(6, "El código debe tener 6 dígitos")
+        .regex(/^\d{6}$/, "El código debe contener únicamente números"),
+    })
+    .strict(),
 });
 
 export const resendVerifyTokenSchema = z.object({
-  body: z.object({
-    email: z
-      .email({ error: "Formato de correo electrónico inválido" })
-      .max(80, "El email es demasiado largo")
-      .trim()
-      .toLowerCase(),
-  }),
+  body: z
+    .object({
+      email: z
+        .email({ error: "Formato de correo electrónico inválido" })
+        .max(80, "El email es demasiado largo")
+        .trim()
+        .toLowerCase(),
+    })
+    .strict(),
 });
 
 export const forgotPasswordSchema = z.object({
-  body: z.object({
-    email: z
-      .email({ error: "Formato de correo electrónico inválido" })
-      .max(80, "El email es demasiado largo")
-      .trim()
-      .toLowerCase(),
-  }),
+  body: z
+    .object({
+      email: z
+        .email({ error: "Formato de correo electrónico inválido" })
+        .max(80, "El email es demasiado largo")
+        .trim()
+        .toLowerCase(),
+    })
+    .strict(),
 });
 
 export const resetPasswordSchema = z.object({
-  body: z.object({
-    email: z
-      .email({ error: "Formato de correo electrónico inválido" })
-      .max(80, "El email es demasiado largo")
-      .trim()
-      .toLowerCase(),
-    token: z.uuid(),
-    password: z
-      .string()
-      .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
-      .regex(/[A-Z]/, { message: "Debe contener al menos una letra mayúscula" })
-      .regex(/[a-z]/, { message: "Debe contener al menos una letra minúscula" })
-      .regex(/[0-9]/, { message: "Debe contener al menos un número" })
-      .regex(/[^a-zA-Z0-9]/, {
-        message: "Debe contener al menos un carácter especial",
-      })
-      .max(100, "La contraseña es demasiado larga"),
-  }),
+  body: z
+    .object({
+      email: z
+        .email({ error: "Formato de correo electrónico inválido" })
+        .max(80, "El email es demasiado largo")
+        .trim()
+        .toLowerCase(),
+      token: z.uuid(),
+      password: z
+        .string()
+        .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
+        .regex(/[A-Z]/, {
+          message: "Debe contener al menos una letra mayúscula",
+        })
+        .regex(/[a-z]/, {
+          message: "Debe contener al menos una letra minúscula",
+        })
+        .regex(/[0-9]/, { message: "Debe contener al menos un número" })
+        .regex(/[^a-zA-Z0-9]/, {
+          message: "Debe contener al menos un carácter especial",
+        })
+        .max(100, "La contraseña es demasiado larga"),
+    })
+    .strict(),
 });
 
 export const changePasswordSchema = z.object({
-  body: z.object({
-    password: z
-      .string()
-      .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
-      .regex(/[A-Z]/, { message: "Debe contener al menos una letra mayúscula" })
-      .regex(/[a-z]/, { message: "Debe contener al menos una letra minúscula" })
-      .regex(/[0-9]/, { message: "Debe contener al menos un número" })
-      .regex(/[^a-zA-Z0-9]/, {
-        message: "Debe contener al menos un carácter especial",
-      })
-      .max(100, "La contraseña es demasiado larga"),
-  }),
+  body: z
+    .object({
+      password: z
+        .string()
+        .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
+        .regex(/[A-Z]/, {
+          message: "Debe contener al menos una letra mayúscula",
+        })
+        .regex(/[a-z]/, {
+          message: "Debe contener al menos una letra minúscula",
+        })
+        .regex(/[0-9]/, { message: "Debe contener al menos un número" })
+        .regex(/[^a-zA-Z0-9]/, {
+          message: "Debe contener al menos un carácter especial",
+        })
+        .max(100, "La contraseña es demasiado larga"),
+    })
+    .strict(),
 });

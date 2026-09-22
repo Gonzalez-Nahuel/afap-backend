@@ -86,6 +86,17 @@ export const openApiComponents = {
       description: "JWT de renovación con una vigencia de 7 días.",
       example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh.signature",
     },
+    Password: {
+      type: "string",
+      format: "password",
+      writeOnly: true,
+      minLength: 8,
+      maxLength: 100,
+      pattern: "^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,100}$",
+      description:
+        "Debe contener al menos una mayúscula, una minúscula, un número y un carácter especial.",
+      example: "SecureP@ss123",
+    },
     RegisterRequest: {
       type: "object",
       additionalProperties: false,
@@ -105,18 +116,7 @@ export const openApiComponents = {
           maxLength: 80,
           example: "nahuel@example.com",
         },
-        password: {
-          type: "string",
-          format: "password",
-          writeOnly: true,
-          minLength: 8,
-          maxLength: 100,
-          pattern:
-            "^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,100}$",
-          description:
-            "Debe contener al menos una mayúscula, una minúscula, un número y un carácter especial.",
-          example: "SecureP@ss123",
-        },
+        password: { $ref: "#/components/schemas/Password" },
       },
     },
     RegisterResponse: {
@@ -181,10 +181,41 @@ export const openApiComponents = {
         password: {
           type: "string",
           format: "password",
-          minLength: 1,
+          writeOnly: true,
+          minLength: 8,
           maxLength: 100,
           example: "SecureP@ss123",
         },
+      },
+    },
+    ResetPasswordRequest: {
+      type: "object",
+      additionalProperties: false,
+      required: ["email", "token", "password"],
+      properties: {
+        email: {
+          type: "string",
+          format: "email",
+          maxLength: 80,
+          example: "nahuel@example.com",
+        },
+        token: {
+          type: "string",
+          format: "uuid",
+          writeOnly: true,
+          description:
+            "Token de un solo uso recibido en el enlace de recuperación.",
+          example: "550e8400-e29b-41d4-a716-446655440000",
+        },
+        password: { $ref: "#/components/schemas/Password" },
+      },
+    },
+    ChangePasswordRequest: {
+      type: "object",
+      additionalProperties: false,
+      required: ["password"],
+      properties: {
+        password: { $ref: "#/components/schemas/Password" },
       },
     },
     LoginWebResponse: {
@@ -323,6 +354,14 @@ export const openApiComponents = {
         },
       },
     },
+    ResetPasswordError: {
+      oneOf: [
+        { $ref: "#/components/schemas/ValidationError" },
+        { $ref: "#/components/schemas/ApiError" },
+      ],
+      description:
+        "La solicitud no cumple el contrato o el enlace de recuperación es inválido o venció.",
+    },
   },
   responses: {
     ValidationError: {
@@ -330,6 +369,40 @@ export const openApiComponents = {
       content: {
         "application/json": {
           schema: { $ref: "#/components/schemas/ValidationError" },
+        },
+      },
+    },
+    ResetPasswordBadRequest: {
+      description:
+        "Los datos no cumplen el contrato o el enlace de recuperación es inválido o venció.",
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/ResetPasswordError" },
+          examples: {
+            invalidOrExpiredToken: {
+              summary: "Enlace inválido o vencido",
+              value: {
+                ok: false,
+                code: "INVALID_OR_EXPIRED_TOKEN",
+                message:
+                  "El enlace de recuperación es inválido o ha expirado. Por favor, solicita uno nuevo.",
+              },
+            },
+            invalidPassword: {
+              summary: "Contraseña que no cumple los requisitos",
+              value: {
+                ok: false,
+                code: "VALIDATION_ERROR",
+                message: "Error de validación",
+                errors: [
+                  {
+                    field: "body.password",
+                    message: "La contraseña debe tener al menos 8 caracteres",
+                  },
+                ],
+              },
+            },
+          },
         },
       },
     },

@@ -241,20 +241,99 @@ authRouter.post(
 authRouter.post(
   "/forgot-password",
   validate(forgotPasswordSchema),
-  authController.forgotPassword,
+  asyncHandler(authController.forgotPassword),
 );
 
+/**
+ * @openapi
+ * /api/auth/reset-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Restablecer la contraseña
+ *     description: |
+ *       Reemplaza la contraseña utilizando el token UUID de un solo uso enviado por
+ *       `forgot-password`. El enlace vence a los 15 minutos. Cuando el cambio se completa,
+ *       el token se elimina y se revocan todas las sesiones de renovación del usuario.
+ *       Los access tokens ya emitidos conservan su validez hasta que expiren.
+ *     operationId: resetPassword
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: "#/components/schemas/ResetPasswordRequest"
+ *     responses:
+ *       "200":
+ *         description: Contraseña restablecida y sesiones de renovación revocadas.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/MessageResponse"
+ *             example:
+ *               ok: true
+ *               message: La contraseña fue actualizada con éxito
+ *       "400":
+ *         $ref: "#/components/responses/ResetPasswordBadRequest"
+ *       "404":
+ *         $ref: "#/components/responses/NotFound"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
+ */
 authRouter.post(
   "/reset-password",
   validate(resetPasswordSchema),
-  authController.resetPassword,
+  asyncHandler(authController.resetPassword),
 );
 
+/**
+ * @openapi
+ * /api/auth/change-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Cambiar la contraseña
+ *     description: |
+ *       Cambia la contraseña del usuario identificado por el access token.
+ *       Al completarse, se revocan todas sus sesiones de renovación. Los access tokens
+ *       ya emitidos conservan su validez hasta que expiren; luego deberá iniciar sesión
+ *       nuevamente para obtener tokens nuevos.
+ *     operationId: changePassword
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: "#/components/schemas/ChangePasswordRequest"
+ *     responses:
+ *       "200":
+ *         description: Contraseña actualizada y sesiones de renovación revocadas.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/MessageResponse"
+ *             example:
+ *               ok: true
+ *               message: La contraseña fue actualizada con éxito
+ *       "400":
+ *         $ref: "#/components/responses/ValidationError"
+ *       "401":
+ *         $ref: "#/components/responses/Unauthorized"
+ *       "404":
+ *         $ref: "#/components/responses/NotFound"
+ *       "500":
+ *         $ref: "#/components/responses/InternalServerError"
+ *       "503":
+ *         $ref: "#/components/responses/ServiceUnavailable"
+ */
 authRouter.post(
   "/change-password",
   authMiddleware,
   validate(changePasswordSchema),
-  authController.changePassword,
+  asyncHandler(authController.changePassword),
 );
 
 /**

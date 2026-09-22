@@ -321,7 +321,6 @@ export const authService = {
     const { email, token, password } = data;
 
     const tokenHash = hashToken(token);
-    const passwordHash = await bcrypt.hash(password, 10);
 
     const hasResetPasswordLinkDataInCache =
       await authCache.getResetPasswordLinkCache(email);
@@ -335,14 +334,15 @@ export const authService = {
 
     const parsedResetLinkData = JSON.parse(hasResetPasswordLinkDataInCache);
 
-    const userId = parsedResetLinkData.userId;
-
     if (tokenHash !== parsedResetLinkData.token)
       throw new AppError(
         400,
         "INVALID_OR_EXPIRED_TOKEN",
         "El enlace de recuperación es inválido o ha expirado. Por favor, solicita uno nuevo.",
       );
+
+    const userId = parsedResetLinkData.userId;
+    const passwordHash = await bcrypt.hash(password, 10);
 
     await authRepository.resetUserPassword(userId, passwordHash);
 

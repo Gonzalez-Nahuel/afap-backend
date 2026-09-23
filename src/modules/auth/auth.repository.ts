@@ -26,11 +26,15 @@ export const authRepository = {
     });
   },
 
+  findUserById: async (id: string) => {
+    return await prisma.user.findUnique({ where: { id } });
+  },
+
   findUserByEmail: async (email: string) => {
     return await prisma.user.findUnique({ where: { email } });
   },
 
-  verifyUserAccount: async (id: string, email: string) => {
+  verifyUserAccount: async (id: string) => {
     await prisma.user.update({
       where: { id },
       data: { isVerified: true },
@@ -71,16 +75,28 @@ export const authRepository = {
   },
 
   resetUserPassword: async (userId: string, password: string) => {
-    return await prisma.user.update({
-      where: { id: userId },
-      data: { password: password },
-    });
+    return await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { password: password },
+      }),
+      prisma.session.updateMany({
+        where: { userId },
+        data: { isRevoked: true },
+      }),
+    ]);
   },
 
   changeUserPassword: async (userId: string, password: string) => {
-    return await prisma.user.update({
-      where: { id: userId },
-      data: { password: password },
-    });
+    return await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { password: password },
+      }),
+      prisma.session.updateMany({
+        where: { userId },
+        data: { isRevoked: true },
+      }),
+    ]);
   },
 };

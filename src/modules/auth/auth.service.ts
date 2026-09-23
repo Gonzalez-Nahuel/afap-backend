@@ -22,7 +22,6 @@ import {
   sendResetPasswordLink,
   sendVerificationOtp,
 } from "@/lib/send-email.js";
-import { resendVerifyTokenSchema } from "./auth.schema.js";
 import { authCache } from "./auth.cache.js";
 
 const DUMMY_HASH =
@@ -46,8 +45,6 @@ export const authService = {
       passwordHash,
     };
 
-    await sendVerificationOtp(data.email, otp);
-
     const user = await authRepository.createUser(userPayload);
 
     const verificationPayload = {
@@ -64,6 +61,8 @@ export const authService = {
     await authCache.createVerificationOtp(verificationPayload);
 
     await authCache.lockResendVerificationOtp(data.email);
+
+    await sendVerificationOtp(data.email, otp);
 
     return user;
   },
@@ -105,10 +104,7 @@ export const authService = {
 
     await authCache.deleteVerificationOtpCache(email);
 
-    await authRepository.verifyUserAccount(
-      parsedVerificationData.userId,
-      email,
-    );
+    await authRepository.verifyUserAccount(parsedVerificationData.userId);
 
     return parsedVerificationData.userId;
   },
@@ -346,15 +342,28 @@ export const authService = {
 
     await authRepository.resetUserPassword(userId, passwordHash);
 
-    await authRepository.revokeAllUserSessions(userId);
-
     await authCache.deleteResetPasswordLinkCache(email);
 
     return;
   },
 
-  changePassword: async (id: string, password: string) => {
-    const passwordHash = await bcrypt.hash(password, 10);
+  changePassword: async (
+    id: string,
+    currrentPassword: string,
+    newPassword: string,
+  ) => {
+    const user = await authRepository.findUserById(id);
+
+    const currentPasswordHash = await bcrypt.hash(currrentPassword, 10);
+
+    if (user?.password !== currentPasswordHash)
+      throw new AppError(
+        400,
+        "PASSWORD_MISMATCH",
+        "La contraseña actual es incorrecta",
+      );
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
 
     await authRepository.changeUserPassword(id, passwordHash);
 

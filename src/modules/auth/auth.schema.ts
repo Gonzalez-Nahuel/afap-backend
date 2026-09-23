@@ -162,7 +162,21 @@ export const resetPasswordSchema = z.object({
 export const changePasswordSchema = z.object({
   body: z
     .object({
-      password: z
+      currentPassword: z
+        .string()
+        .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
+        .regex(/[A-Z]/, {
+          message: "Debe contener al menos una letra mayúscula",
+        })
+        .regex(/[a-z]/, {
+          message: "Debe contener al menos una letra minúscula",
+        })
+        .regex(/[0-9]/, { message: "Debe contener al menos un número" })
+        .regex(/[^a-zA-Z0-9]/, {
+          message: "Debe contener al menos un carácter especial",
+        })
+        .max(100, "La contraseña es demasiado larga"),
+      newPassword: z
         .string()
         .min(8, { message: "La contraseña debe tener al menos 8 caracteres" })
         .regex(/[A-Z]/, {

@@ -92,9 +92,9 @@ export const authController = {
 
   changePassword: async (req, res) => {
     const { id } = req.user!;
-    const { password } = req.body;
+    const { currentPassword, newPassword } = req.body;
 
-    await authService.changePassword(id, password);
+    await authService.changePassword(id, currentPassword, newPassword);
 
     res.json({
       ok: true,

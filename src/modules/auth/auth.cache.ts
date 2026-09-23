@@ -1,6 +1,5 @@
 import { redis } from "@/lib/redis.js";
 import type { SaveTokenDTO, VerificationDataDto } from "./auth.dto.js";
-import { email } from "zod";
 
 export const authCache = {
   createVerificationOtp: async (data: SaveTokenDTO) => {
@@ -65,7 +64,7 @@ export const authCache = {
   ) => {
     const ttlRemaining = await redis.ttl(`auth:verification:${email}`);
 
-    if (ttlRemaining === 0) return;
+    if (ttlRemaining <= 0) return;
 
     const verificationData = {
       ...data,

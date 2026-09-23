@@ -50,7 +50,10 @@ export const errorMiddleware = (
   }
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    console.error(`[PRISMA KNOWN ERROR] Código: ${err.code}`, err.message);
+    logger.error(
+      { message: err.message },
+      `[PRISMA KNOWN ERROR] Código: ${err.code}`,
+    );
 
     if (err.code === "P2002") {
       return res.status(409).json({

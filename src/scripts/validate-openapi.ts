@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger.js";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -87,6 +88,6 @@ if (qualityErrors.length > 0) {
   );
 }
 
-console.log(
+logger.info(
   `OpenAPI document is valid: ${operationIds.size} operations checked.`,
 );

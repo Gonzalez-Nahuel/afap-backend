@@ -36,6 +36,14 @@ export const openApiComponents = {
       },
       example: "web",
     },
+    RefreshTokenCookie: {
+      name: "refreshToken",
+      in: "cookie",
+      required: false,
+      description:
+        "Refresh token utilizado por clientes web. Es obligatorio para renovar la sesión y opcional para cerrar sesión.",
+      schema: { $ref: "#/components/schemas/RefreshToken" },
+    },
   },
   schemas: {
     User: {
@@ -213,9 +221,17 @@ export const openApiComponents = {
     ChangePasswordRequest: {
       type: "object",
       additionalProperties: false,
-      required: ["password"],
+      required: ["currentPassword", "newPassword"],
       properties: {
-        password: { $ref: "#/components/schemas/Password" },
+        currentPassword: {
+          allOf: [{ $ref: "#/components/schemas/Password" }],
+          description:
+            "Contraseña actual del usuario, requerida para confirmar el cambio.",
+        },
+        newPassword: {
+          allOf: [{ $ref: "#/components/schemas/Password" }],
+          description: "Nueva contraseña que reemplazará a la actual.",
+        },
       },
     },
     LoginWebResponse: {
@@ -264,7 +280,7 @@ export const openApiComponents = {
         refreshToken: { $ref: "#/components/schemas/RefreshToken" },
       },
       description:
-        "El campo refreshToken se usa en mobile. En web se lee desde la cookie httpOnly.",
+        "Para clientes mobile, refreshToken es obligatorio. En web el body se omite y el token se lee desde la cookie httpOnly.",
     },
     RefreshWebResponse: {
       type: "object",
@@ -362,6 +378,14 @@ export const openApiComponents = {
       description:
         "La solicitud no cumple el contrato o el enlace de recuperación es inválido o venció.",
     },
+    ChangePasswordError: {
+      oneOf: [
+        { $ref: "#/components/schemas/ValidationError" },
+        { $ref: "#/components/schemas/ApiError" },
+      ],
+      description:
+        "La solicitud no cumple el contrato o la contraseña actual es incorrecta.",
+    },
   },
   responses: {
     ValidationError: {
@@ -397,6 +421,39 @@ export const openApiComponents = {
                 errors: [
                   {
                     field: "body.password",
+                    message: "La contraseña debe tener al menos 8 caracteres",
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+    ChangePasswordBadRequest: {
+      description:
+        "Los datos no cumplen el contrato o la contraseña actual es incorrecta.",
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/ChangePasswordError" },
+          examples: {
+            passwordMismatch: {
+              summary: "Contraseña actual incorrecta",
+              value: {
+                ok: false,
+                code: "PASSWORD_MISMATCH",
+                message: "La contraseña actual es incorrecta",
+              },
+            },
+            invalidNewPassword: {
+              summary: "Nueva contraseña que no cumple los requisitos",
+              value: {
+                ok: false,
+                code: "VALIDATION_ERROR",
+                message: "Error de validación",
+                errors: [
+                  {
+                    field: "body.newPassword",
                     message: "La contraseña debe tener al menos 8 caracteres",
                   },
                 ],
@@ -543,6 +600,19 @@ export const openApiComponents = {
         },
         recordNotFound: {
           summary: "Registro inexistente",
+          value: {
+            ok: false,
+            code: "NOT_FOUND_ERROR",
+            message: "El registro solicitado no existe o no fue encontrado",
+          },
+        },
+      }),
+    },
+    RecordNotFound: {
+      description: "El usuario asociado a la operación ya no existe.",
+      content: apiErrorContent({
+        recordNotFound: {
+          summary: "Usuario inexistente",
           value: {
             ok: false,
             code: "NOT_FOUND_ERROR",

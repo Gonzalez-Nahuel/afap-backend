@@ -354,9 +354,19 @@ export const authService = {
   ) => {
     const user = await authRepository.findUserById(id);
 
-    const currentPasswordHash = await bcrypt.hash(currrentPassword, 10);
+    if (!user)
+      throw new AppError(
+        400,
+        "PASSWORD_MISMATCH",
+        "La contraseña actual es incorrecta",
+      );
 
-    if (user?.password !== currentPasswordHash)
+    const passwordIsValid = await bcrypt.compare(
+      currrentPassword,
+      user?.password,
+    );
+
+    if (!passwordIsValid)
       throw new AppError(
         400,
         "PASSWORD_MISMATCH",
@@ -366,8 +376,6 @@ export const authService = {
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
     await authRepository.changeUserPassword(id, passwordHash);
-
-    await authRepository.revokeAllUserSessions(id);
 
     return;
   },

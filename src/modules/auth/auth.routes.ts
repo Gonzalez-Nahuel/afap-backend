@@ -276,7 +276,7 @@ authRouter.post(
  *       "400":
  *         $ref: "#/components/responses/ResetPasswordBadRequest"
  *       "404":
- *         $ref: "#/components/responses/NotFound"
+ *         $ref: "#/components/responses/RecordNotFound"
  *       "500":
  *         $ref: "#/components/responses/InternalServerError"
  *       "503":
@@ -295,7 +295,8 @@ authRouter.post(
  *     tags: [Auth]
  *     summary: Cambiar la contraseña
  *     description: |
- *       Cambia la contraseña del usuario identificado por el access token.
+ *       Comprueba la contraseña actual y cambia la contraseña del usuario identificado
+ *       por el access token. Ambas contraseñas deben cumplir la política de seguridad.
  *       Al completarse, se revocan todas sus sesiones de renovación. Los access tokens
  *       ya emitidos conservan su validez hasta que expiren; luego deberá iniciar sesión
  *       nuevamente para obtener tokens nuevos.
@@ -319,11 +320,11 @@ authRouter.post(
  *               ok: true
  *               message: La contraseña fue actualizada con éxito
  *       "400":
- *         $ref: "#/components/responses/ValidationError"
+ *         $ref: "#/components/responses/ChangePasswordBadRequest"
  *       "401":
  *         $ref: "#/components/responses/Unauthorized"
  *       "404":
- *         $ref: "#/components/responses/NotFound"
+ *         $ref: "#/components/responses/RecordNotFound"
  *       "500":
  *         $ref: "#/components/responses/InternalServerError"
  *       "503":
@@ -368,14 +369,17 @@ authRouter.get("/me", authMiddleware, asyncHandler(authController.me));
  *     summary: Renovar la sesión
  *     description: |
  *       Rota el refresh token: revoca la sesión anterior y crea una nueva.
- *       Para `web`, lee y reemplaza la cookie httpOnly. Para `mobile`, lee el token del body
- *       y devuelve el nuevo refresh token junto con el access token.
+ *       Para `web`, la cookie httpOnly `refreshToken` es obligatoria y se reemplaza.
+ *       Para `mobile`, `refreshToken` es obligatorio en el body y el token nuevo se
+ *       devuelve junto con el access token.
  *     operationId: refreshSession
  *     security: []
  *     parameters:
  *       - $ref: "#/components/parameters/ClientTypeHeader"
+ *       - $ref: "#/components/parameters/RefreshTokenCookie"
  *     requestBody:
  *       required: false
+ *       description: Obligatorio para mobile y omitido para web.
  *       content:
  *         application/json:
  *           schema:
@@ -415,15 +419,17 @@ authRouter.post(
  *     tags: [Auth]
  *     summary: Cerrar sesión
  *     description: |
- *       Revoca la sesión asociada al refresh token cuando está presente.
- *       Para `web`, además elimina la cookie. La operación es idempotente: también devuelve
- *       éxito cuando no se envía un refresh token.
+ *       Revoca la sesión asociada al refresh token y elimina la cookie web.
+ *       En `mobile`, el refresh token es obligatorio en el body. En `web`, la operación
+ *       también devuelve éxito cuando la cookie no está presente, por lo que es idempotente.
  *     operationId: logout
  *     security: []
  *     parameters:
  *       - $ref: "#/components/parameters/ClientTypeHeader"
+ *       - $ref: "#/components/parameters/RefreshTokenCookie"
  *     requestBody:
  *       required: false
+ *       description: Obligatorio para mobile y omitido para web.
  *       content:
  *         application/json:
  *           schema:

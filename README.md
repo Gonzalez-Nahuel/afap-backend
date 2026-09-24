@@ -1,6 +1,6 @@
 # AFAP Backend
 
-API REST para la plataforma AFAP, orientada a la organización de competencias deportivas. El módulo implementado actualmente cubre registro, verificación de email, autenticación y rotación de sesiones para clientes web y mobile.
+API REST para la plataforma AFAP, orientada a la organización de competencias deportivas. El módulo implementado actualmente cubre registro, verificación de email, autenticación, recuperación y cambio de contraseña, y administración de sesiones para clientes web y mobile.
 
 ## Tecnologías
 
@@ -16,6 +16,7 @@ API REST para la plataforma AFAP, orientada a la organización de competencias d
 - PostgreSQL.
 - Redis.
 - Una API key de Resend para los emails transaccionales.
+- Una URL de frontend para construir los enlaces de recuperación de contraseña.
 
 ## Configuración local
 
@@ -46,6 +47,27 @@ El header `x-client-type` define el contrato de sesión:
 - `mobile`: el refresh token se recibe y devuelve en el cuerpo JSON.
 
 Swagger UI agrega automáticamente `Bearer` al access token ingresado mediante el botón **Authorize**.
+
+## Rutas de autenticación
+
+| Método | Ruta                        | Autenticación | Propósito                                      |
+| ------ | --------------------------- | ------------- | ---------------------------------------------- |
+| POST   | `/api/auth/register`        | Pública       | Registrar una cuenta y enviar el OTP.          |
+| POST   | `/api/auth/verify-email`    | Pública       | Verificar la cuenta mediante el OTP.           |
+| POST   | `/api/auth/resend-otp`      | Pública       | Solicitar un nuevo OTP de verificación.        |
+| POST   | `/api/auth/login`           | Pública       | Iniciar una sesión web o mobile.               |
+| POST   | `/api/auth/forgot-password` | Pública       | Solicitar un enlace para recuperar la cuenta.  |
+| POST   | `/api/auth/reset-password`  | Pública       | Restablecer la contraseña mediante el enlace.  |
+| POST   | `/api/auth/change-password` | Bearer JWT    | Cambiar la contraseña desde una sesión activa. |
+| GET    | `/api/auth/me`              | Bearer JWT    | Obtener la identidad del usuario autenticado.  |
+| POST   | `/api/auth/refresh`         | Refresh token | Rotar los tokens de la sesión.                 |
+| POST   | `/api/auth/logout`          | Refresh token | Revocar la sesión actual.                      |
+
+`forgot-password` responde de manera uniforme aunque el email no exista o la cuenta no esté verificada. El enlace enviado por email vence a los 15 minutos y se invalida después de restablecer la contraseña.
+
+Tanto `reset-password` como `change-password` revocan las sesiones de renovación del usuario. Los access tokens ya emitidos conservan su validez hasta su vencimiento de 15 minutos.
+
+Para `change-password` se deben enviar `currentPassword` y `newPassword`. Las dos deben cumplir la política de contraseña definida por la API.
 
 ## Scripts
 

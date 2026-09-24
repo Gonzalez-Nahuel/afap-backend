@@ -88,6 +88,6 @@ if (qualityErrors.length > 0) {
   );
 }
 
-logger.info(
+console.log(
   `OpenAPI document is valid: ${operationIds.size} operations checked.`,
 );

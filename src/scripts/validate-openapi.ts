@@ -1,4 +1,3 @@
-import { logger } from "@/lib/logger.js";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";

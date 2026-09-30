@@ -12,7 +12,7 @@ describe("authMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-  it("agrega el usuario del token al request y continúa", () => {
+  it("Add the user from the token to the request and continue", () => {
     const user = { id: "user-1", username: "pepito2" };
 
     vi.mocked(verifyAccessToken).mockReturnValue(user);
@@ -32,7 +32,7 @@ describe("authMiddleware", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("rechaza un header que no usa Bearer", () => {
+  it("Reject a header that does not use Bearer", () => {
     const req = {
       headers: {
         authorization: "token-de-prueba",

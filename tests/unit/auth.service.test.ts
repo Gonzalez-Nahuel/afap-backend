@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { authService } from "../../src/modules/auth/auth.service.js";
 import { authCache } from "../../src/modules/auth/auth.cache.js";
 import { authRepository } from "../../src/modules/auth/auth.repository.js";
 import { hashToken } from "../../src/lib/hash-token.js";
-import { beforeEach } from "node:test";
 import bcrypt from "bcrypt";
+import { generateAccessToken, generateRefreshToken } from "@/lib/jwt.js";
 
 vi.mock("../../src/modules/auth/auth.cache.js", () => ({
   authCache: {
@@ -40,9 +40,9 @@ describe("authService.verifyEmail", () => {
 
   const email = "user123@gmail.com";
 
-  it("registra el intento y rechaza otp incorrecto", async () => {
+  it("Log the attempt and reject an incorrect OTP", async () => {
     const verificationData = {
-      token: hashToken("1234567"),
+      token: hashToken("123456"),
       userId: "user-1",
       attempts: 0,
     };
@@ -51,13 +51,13 @@ describe("authService.verifyEmail", () => {
       JSON.stringify(verificationData),
     );
 
-    await expect(authService.verifyEmail("00000", email)).rejects.toMatchObject(
-      {
-        statusCode: 401,
-        code: "VERIFICATION_TOKEN_INVALID",
-        message: "El código de verificación es inválido",
-      },
-    );
+    await expect(
+      authService.verifyEmail("000000", email),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      code: "VERIFICATION_TOKEN_INVALID",
+      message: "El código de verificación es inválido",
+    });
 
     expect(authCache.incrementVerificationAttempts).toHaveBeenCalledWith(
       email,
@@ -67,7 +67,7 @@ describe("authService.verifyEmail", () => {
     expect(authRepository.verifyUserAccount).not.toHaveBeenCalled();
   });
 
-  it("verifica la cuenta cuando el otp es correcto, elimina los datos de la caché y devuelve el userId", async () => {
+  it("Verify the account when the OTP is correct, remove data from the cache, and return the userId", async () => {
     const verificationData = {
       token: hashToken("123456"),
       userId: "user-1",
@@ -91,7 +91,7 @@ describe("authService.verifyEmail", () => {
     expect(authCache.incrementVerificationAttempts).not.toHaveBeenCalled();
   });
 
-  it("rechaza un otp vencido o inexistente", async () => {
+  it("Reject an expired or non-existent OTP", async () => {
     vi.mocked(authCache.getVerificationOtpCache).mockResolvedValue(null);
 
     await expect(
@@ -110,7 +110,7 @@ describe("authService.verifyEmail", () => {
     expect(authCache.incrementVerificationAttempts).not.toHaveBeenCalled();
   });
 
-  it("bloquea petición que alcanzó el límite de intentos", async () => {
+  it("Block a request that reached the rate limit", async () => {
     const verificationData = {
       token: hashToken("123456"),
       userId: "user-1",
@@ -156,7 +156,7 @@ describe("authService.loginUser", () => {
     userAgent,
   };
 
-  it("rechaza un email inexistente sin crear una sesión", async () => {
+  it("Reject a non-existent email without creating a session", async () => {
     vi.mocked(authRepository.findUserByEmail).mockResolvedValue(null);
 
     await expect(authService.loginUser(loginData)).rejects.toMatchObject({
@@ -170,7 +170,7 @@ describe("authService.loginUser", () => {
     expect(authRepository.createSession).not.toHaveBeenCalled();
   });
 
-  it("rechaza una contraseña incorrecta sin crear una sessión", async () => {
+  it("Reject an incorrect password without creating a session", async () => {
     const password = await bcrypt.hash("Secure2!", 10);
 
     vi.mocked(authRepository.findUserByEmail).mockResolvedValue({
@@ -194,7 +194,7 @@ describe("authService.loginUser", () => {
     expect(authRepository.createSession).not.toHaveBeenCalled();
   });
 
-  it("impide el login de una cuenta no verificada", async () => {
+  it("Prevent login for an unverified account", async () => {
     const password = await bcrypt.hash("Secure1!", 10);
 
     vi.mocked(authRepository.findUserByEmail).mockResolvedValue({
@@ -216,5 +216,36 @@ describe("authService.loginUser", () => {
     expect(authRepository.findUserByEmail).toHaveBeenCalledWith(body.email);
 
     expect(authRepository.createSession).not.toHaveBeenCalled();
+  });
+
+  it("Allow login and create a session for a registered and verified user", async () => {
+    const password = await bcrypt.hash("Secure1!", 10);
+
+    vi.mocked(authRepository.findUserByEmail).mockResolvedValue({
+      id: "user-1",
+      username: "user_dev",
+      email: "user123@gmail.com",
+      password,
+      isVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    vi.mocked(generateAccessToken).mockReturnValue("access-token");
+    vi.mocked(generateRefreshToken).mockReturnValue("refresh-token");
+
+    await expect(authService.loginUser(loginData)).resolves.toMatchObject({
+      user: { id: "user-1", username: "user_dev" },
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+    });
+
+    expect(authRepository.createSession).toHaveBeenCalledWith({
+      userId: "user-1",
+      refreshTokenHash: hashToken("refresh-token"),
+      ipAddress: ip,
+      userAgent,
+      expiresAt: expect.any(Date),
+    });
   });
 });

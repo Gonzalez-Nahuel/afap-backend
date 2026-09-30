@@ -5,7 +5,7 @@ import {
 } from "../../src/modules/auth/auth.schema.js";
 
 describe("registerUserSchema", () => {
-  it("acepta un registro válido y normaliza el email", () => {
+  it("Accept a valid registration and normalize the email", () => {
     const result = registerUserSchema.parse({
       body: {
         username: "nahuel_dev",
@@ -17,7 +17,7 @@ describe("registerUserSchema", () => {
     expect(result.body.email).toBe("nahuelk123@gmail.com");
   });
 
-  it("rechaza una contraseña demasiado corta", () => {
+  it("Reject a password that is too short", () => {
     const result = registerUserSchema.safeParse({
       body: {
         username: "nahuel_dev",
@@ -39,7 +39,7 @@ describe("registerUserSchema", () => {
 });
 
 describe("loginUserSchema", () => {
-  it("rechaza el login si falta x-client-type", () => {
+  it("Reject the login if x-client-type is missing", () => {
     const result = loginUserSchema.safeParse({
       headers: {},
       body: {

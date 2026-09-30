@@ -2,7 +2,7 @@ import { expect, describe, it } from "vitest";
 import { hashToken } from "../../src/lib/hash-token.js";
 
 describe("hashToken", () => {
-  it("genera el hash SHA-256 de un token", () => {
+  it("Generate the SHA-256 hash of a token", () => {
     const result = hashToken("abc");
 
     expect(result).toBe(

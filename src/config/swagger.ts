@@ -28,7 +28,7 @@ const options: swaggerJSDoc.Options = {
       {
         name: "Auth",
         description:
-          "Registro, verificación de email, inicio de sesión y administración de tokens.",
+          "Registro, verificación de email, inicio y cierre de sesión, rotación de tokens y administración de contraseñas.",
       },
     ],
     components: openApiComponents,

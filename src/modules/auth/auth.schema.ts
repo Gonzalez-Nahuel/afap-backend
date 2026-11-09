@@ -124,10 +124,14 @@ export const forgotPasswordSchema = z.object({
   body: z
     .object({
       email: z
-        .email({ error: "Formato de correo electrónico inválido" })
-        .max(80, "El email es demasiado largo")
+        .string()
         .trim()
-        .toLowerCase(),
+        .toLowerCase()
+        .pipe(
+          z
+            .email({ error: "Formato de correo electrónico inválido" })
+            .max(80, "El email es demasiado largo"),
+        ),
     })
     .strict(),
 });

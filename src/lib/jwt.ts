@@ -1,5 +1,6 @@
 import { env } from "@/config/env.js";
 import jwt from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
 
 export interface UserPayload {
   id: string;
@@ -13,6 +14,7 @@ const generateToken = (
 ) => {
   return jwt.sign(payload, secret, {
     expiresIn,
+    jwtid: randomUUID(),
   });
 };
 

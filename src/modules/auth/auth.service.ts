@@ -40,8 +40,10 @@ export const authService = {
     const tokenHash = hashToken(otp);
     const EXPIRATION_SECONDS = 15 * 60;
 
+    const { password, ...dataWithoutPassword } = data;
+
     const userPayload = {
-      ...data,
+      ...dataWithoutPassword,
       passwordHash,
     };
 
@@ -373,6 +375,15 @@ export const authService = {
         "La contraseña actual es incorrecta",
       );
 
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+
+    if (isSamePassword)
+      throw new AppError(
+        400,
+        "SAME_PASSWORD_ERROR",
+        "La nueva contraseña no puede ser igual a la contraseña actual.",
+      );
+
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
     await authRepository.changeUserPassword(id, passwordHash);
@@ -414,7 +425,7 @@ export const authService = {
 
     await authRepository.revokeSession(refreshTokenHash);
 
-    const { iat, exp, ...cleanPayload } = verifiedToken as any;
+    const { iat, exp, jti, ...cleanPayload } = verifiedToken as any;
 
     const accessToken = generateAccessToken(cleanPayload);
     const newRefreshToken = generateRefreshToken(cleanPayload);
@@ -436,6 +447,7 @@ export const authService = {
 
     return { accessToken, newRefreshToken };
   },
+
   logout: async (refreshToken: string) => {
     const refreshTokenHash = hashToken(refreshToken);
 

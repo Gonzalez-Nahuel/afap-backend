@@ -13,6 +13,12 @@ export interface VerificationDataDto {
 
 export type RegisterUserDTO = z.infer<typeof registerUserSchema>["body"];
 
+export interface CreateUserDTO {
+  username: string;
+  email: string;
+  passwordHash: string;
+}
+
 export type LoginUserSchemaType = z.infer<typeof loginUserSchema>;
 
 export interface ClientInfoDTO {

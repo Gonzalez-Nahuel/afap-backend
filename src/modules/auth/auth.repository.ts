@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma.js";
 import type {
   CreateSessionDTO,
+  CreateUserDTO,
   RegisterUserDTO,
   VerificationDataDto,
 } from "./auth.dto.js";
 
 export const authRepository = {
   createUser: async (
-    data: RegisterUserDTO & {
+    data: CreateUserDTO & {
       passwordHash: string;
     },
   ) => {

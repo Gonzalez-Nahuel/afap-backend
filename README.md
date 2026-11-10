@@ -83,8 +83,10 @@ Para `change-password` se deben enviar `currentPassword` y `newPassword`. Las do
 
 `openapi.json` es un artefacto generado y por eso no se versiona.
 
-## Validación continua
+## Integración continua (CI)
 
-El workflow de GitHub Actions se ejecuta en cada pull request y en cada push a `main`. Instala dependencias, genera Prisma, valida el contrato OpenAPI fuente, compila el proyecto y vuelve a validar OpenAPI desde `dist`.
+El workflow de GitHub Actions se ejecuta en cada pull request y en cada push a main. Instala las dependencias, genera Prisma Client, aplica las migraciones pendientes, valida el contrato OpenAPI del código fuente, compila el proyecto y vuelve a validar OpenAPI desde dist.
 
-La validación falla si el documento no cumple OpenAPI 3.0, contiene referencias `$ref` inválidas, repite un `operationId` o deja una operación sin resumen, descripción, tags o respuestas esperadas.
+Además, ejecuta la suite completa de tests (unitarios, de integración y E2E) utilizando Vitest, con servicios de PostgreSQL y Redis para probar los distintos flujos de la aplicación.
+
+La validación de OpenAPI falla si el documento no cumple con OpenAPI 3.0, contiene referencias $ref inválidas, repite un operationId o deja una operación sin resumen, descripción, tags o respuestas esperadas.

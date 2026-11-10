@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,12 +14,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-openapi:
-    name: Build and validate OpenAPI
+  build-tests-and-openapi:
+    name: Build, tests and validate OpenAPI
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/afap
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/afap_test
+      REDIS_URL: redis://localhost:6379/15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: afap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d afap_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout repository
@@ -34,13 +61,19 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma Client
-        run: npm run prisma:generate
+        run: npx prisma generate
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
 
       - name: Validate source OpenAPI document
         run: npm run openapi:validate
 
-      - name: Build production JavaScript
+      - name: Build application
         run: npm run build
 
       - name: Validate production OpenAPI document
         run: npm run openapi:validate:dist
+
+      - name: Run tests
+        run: npm run test:run

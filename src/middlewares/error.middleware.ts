@@ -50,10 +50,7 @@ export const errorMiddleware = (
   }
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    logger.error(
-      { message: err.message },
-      `[PRISMA KNOWN ERROR] Código: ${err.code}`,
-    );
+    logger.error({ code: err.code }, "[PRISMA KNOWN ERROR]");
 
     if (err.code === "P2002") {
       return res.status(409).json({
@@ -79,9 +76,9 @@ export const errorMiddleware = (
   }
 
   if (err instanceof Prisma.PrismaClientInitializationError) {
-    console.error(
+    logger.error(
+      { name: err.name },
       "[PRISMA CONNECTION ERROR] No se pudo conectar a la BD",
-      err.message,
     );
     return res.status(503).json({
       ok: false,

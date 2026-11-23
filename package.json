@@ -4,7 +4,7 @@
   "description": "app to manage the backend of the AFAP project",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc && tsc-alias",
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
     "start": "node dist/src/server.js",
     "dev": "tsx --watch src/server.ts",
     "prisma:generate": "prisma generate",

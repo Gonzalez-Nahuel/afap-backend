@@ -1,9 +1,15 @@
 node_modules
 /dist
-# Keep environment variables out of version control
+
 .env
+.env.*
+!.env.example
 
 /generated/prisma
-
-# Generated OpenAPI artifact
 /openapi.json
+
+/coverage
+
+*.log
+.DS_Store
+Thumbs.db

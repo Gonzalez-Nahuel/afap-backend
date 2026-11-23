@@ -8,6 +8,7 @@ import { swaggerSpec } from "./config/swagger.js";
 import { router } from "./routes/index.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 import { logger } from "./lib/logger.js";
+import { env } from "@/config/env.js";
 
 export const app = express();
 
@@ -17,7 +18,7 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: env.FRONTEND_URL,
     credentials: true,
   }),
 );

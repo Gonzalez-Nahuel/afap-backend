@@ -12,3 +12,6 @@ vi.stubEnv("ACCESS_TOKEN_EXPIRES", "15m");
 vi.stubEnv("REFRESH_TOKEN_EXPIRES", "7d");
 vi.stubEnv("RESEND_API_KEY", "test-key");
 vi.stubEnv("FRONTEND_URL", "http://localhost:5173");
+vi.stubEnv("POSTGRES_USER", "postgres");
+vi.stubEnv("POSTGRES_PASSWORD", "postgres");
+vi.stubEnv("POSTGRES_DB", "afap_test");
